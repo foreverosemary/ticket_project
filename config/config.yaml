@@ -1,0 +1,14 @@
+mysql:
+  host: “localhost"
+  port: 3307
+  username: "root"
+  password: "123456"
+  database: "go_ticket"
+  charset: "utf8mb4"
+  parseTime: true
+  loc: "Local"
+
+redis:
+  addr: "localhost:6379"
+  password: "123456"
+  db: 0
