@@ -71,7 +71,7 @@ func AddConfigChangeCallback(fn func()) {
 func Load() error {
 	// 设置配置文件信息
 	v := viper.New()
-	v.SetConfigFile("./config.yaml")
+	v.SetConfigFile("./config/config.yaml")
 
 	// 开启热监听
 	v.WatchConfig()

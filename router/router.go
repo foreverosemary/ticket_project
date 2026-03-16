@@ -65,46 +65,46 @@ func InitRouter() {
 		}
 	}
 
-	// 订单接口
-	orderGroup := r.Group("/api/v1/orders")
-	{
-		// 管理员接口
-		adminGroup := orderGroup.Group("")
-		adminGroup.Use(utils.AdminAuth())
-		{
-			adminGroup.GET("", controller.GetOrders)
-		}
+	// // 订单接口
+	// orderGroup := r.Group("/api/v1/orders")
+	// {
+	// 	// 管理员接口
+	// 	adminGroup := orderGroup.Group("")
+	// 	adminGroup.Use(utils.AdminAuth())
+	// 	{
+	// 		adminGroup.GET("", controller.GetOrders)
+	// 	}
 
-		// 需要登录的接口
-		privateGroup := orderGroup.Group("")
-		privateGroup.Use(utils.JWTAuth())
-		{
-			privateGroup.POST("", controller.CreateOrder)
-			privateGroup.PATCH("/:id", controller.UpdateOrder)
-			privateGroup.GET("/:id", controller.GetOrderDetail)
-		}
-	}
+	// 	// 需要登录的接口
+	// 	privateGroup := orderGroup.Group("")
+	// 	privateGroup.Use(utils.JWTAuth())
+	// 	{
+	// 		privateGroup.POST("", controller.CreateOrder)
+	// 		privateGroup.PATCH("/:id", controller.UpdateOrder)
+	// 		privateGroup.GET("/:id", controller.GetOrderDetail)
+	// 	}
+	// }
 
-	// 票接口
-	ticketGroup := r.Group("/api/v1/tickets")
-	{
-		// 需要登录的接口
-		privateGroup := ticketGroup.Group("")
-		privateGroup.Use(utils.JWTAuth())
-		{
-			privateGroup.GET("/:id", controller.GetTicketDetail)
-		}
+	// // 票接口
+	// ticketGroup := r.Group("/api/v1/tickets")
+	// {
+	// 	// 需要登录的接口
+	// 	privateGroup := ticketGroup.Group("")
+	// 	privateGroup.Use(utils.JWTAuth())
+	// 	{
+	// 		privateGroup.GET("/:id", controller.GetTicketDetail)
+	// 	}
 
-		// 管理员接口
-		adminGroup := r.Group("")
-		adminGroup.Use(utils.AdminAuth())
-		{
-			adminGroup.PATCH("/:id/verify", controller.VerifyTicket)
-			adminGroup.PATCH("/:id/invalidate", controller.InvalidateTicket)
-			adminGroup.GET("", controller.GetTickets)
-			adminGroup.GET("/check", controller.VerifyTicketNO)
-		}
-	}
+	// 	// 管理员接口
+	// 	adminGroup := r.Group("")
+	// 	adminGroup.Use(utils.AdminAuth())
+	// 	{
+	// 		adminGroup.PATCH("/:id/verify", controller.VerifyTicket)
+	// 		adminGroup.PATCH("/:id/invalidate", controller.InvalidateTicket)
+	// 		adminGroup.GET("", controller.GetTickets)
+	// 		adminGroup.GET("/check", controller.VerifyTicketNO)
+	// 	}
+	// }
 }
 
 func GetRouter() *gin.Engine {

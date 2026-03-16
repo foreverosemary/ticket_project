@@ -24,7 +24,7 @@ func main() {
 	r := router.GetRouter()
 
 	// 启动服务
-	log.Panicln("服务启动成功并运行在 :8080 端口")
+	log.Println("服务启动成功并运行在 :8080 端口")
 	if err := r.Run(":8080"); err != nil {
 		log.Fatalf("服务启动失败: %v", err)
 	}
