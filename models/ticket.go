@@ -18,6 +18,7 @@ type Ticket struct {
 
 	// 临时字段
 	ActivityName string `gorm:"-" json:"activityName"`
+	UserID       int64  `gorm:"-" json:"userId"`
 }
 
 func (Ticket) TableName() string {

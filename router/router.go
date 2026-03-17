@@ -85,26 +85,26 @@ func InitRouter() {
 	// 	}
 	// }
 
-	// // 票接口
-	// ticketGroup := r.Group("/api/v1/tickets")
-	// {
-	// 	// 需要登录的接口
-	// 	privateGroup := ticketGroup.Group("")
-	// 	privateGroup.Use(utils.JWTAuth())
-	// 	{
-	// 		privateGroup.GET("/:id", controller.GetTicketDetail)
-	// 	}
+	// 票接口
+	ticketGroup := r.Group("/api/v1/tickets")
+	{
+		// 需要登录的接口
+		privateGroup := ticketGroup.Group("")
+		privateGroup.Use(utils.JWTAuth())
+		{
+			privateGroup.GET("/:id", controller.GetTicketDetail)
+		}
 
-	// 	// 管理员接口
-	// 	adminGroup := r.Group("")
-	// 	adminGroup.Use(utils.AdminAuth())
-	// 	{
-	// 		adminGroup.PATCH("/:id/verify", controller.VerifyTicket)
-	// 		adminGroup.PATCH("/:id/invalidate", controller.InvalidateTicket)
-	// 		adminGroup.GET("", controller.GetTickets)
-	// 		adminGroup.GET("/check", controller.VerifyTicketNO)
-	// 	}
-	// }
+		// 管理员接口
+		adminGroup := r.Group("")
+		adminGroup.Use(utils.AdminAuth())
+		{
+			adminGroup.PATCH("/:id/verify", controller.VerifyTicket)
+			adminGroup.PATCH("/:id/invalidate", controller.InvalidateTicket)
+			adminGroup.GET("", controller.GetTickets)
+			adminGroup.GET("/check", controller.VerifyTicketNO)
+		}
+	}
 }
 
 func GetRouter() *gin.Engine {
