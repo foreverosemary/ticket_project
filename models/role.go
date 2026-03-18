@@ -2,6 +2,8 @@ package models
 
 import "time"
 
+const RoleAdmin, RoleUser = 1, 2
+
 type Role struct {
 	ID          int       `json:"id"`
 	Name        string    `gorm:"type:varchar(20);not null" json:"name"`

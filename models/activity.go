@@ -7,11 +7,14 @@ import (
 	"gorm.io/gorm"
 )
 
+const NS, IP, ED, RM = 0, 1, 2, 3
+
 type Activity struct {
 	ID        int64          `json:"id"`
 	Name      string         `gorm:"type:varchar(30);not null" json:"name"`
 	Content   *string        `gorm:"type:text" json:"content"`
 	Stock     int            `gorm:"default:0" json:"stock"`
+	Total     int            `gorm:"default:0" json:"total"`
 	Status    int8           `gorm:"type:tinyint;not null;default:0;index:idx_status_end_time,priority:1" json:"status"`
 	StartTime time.Time      `gorm:"not null" json:"startTime"`
 	EndTime   time.Time      `gorm:"not null;index:idx_status_end_time,priority:2" json:"endTime"`
@@ -30,9 +33,9 @@ func (a *Activity) Verify() error {
 	if len([]rune(a.Name)) < 1 || len([]rune(a.Name)) > 30 {
 		return errors.New("活动名称应为 1~30 字")
 	}
-	// 库存非负
-	if a.Stock < 0 {
-		return errors.New("库存应为非负数")
+	// 总量非负
+	if a.Total < 0 {
+		return errors.New("活动总量应为非负数")
 	}
 	// 开始时间 < 结束时间
 	if !a.StartTime.Before(a.EndTime) {
@@ -42,12 +45,15 @@ func (a *Activity) Verify() error {
 }
 
 func (a *Activity) SetStatus() {
+	if a.Status == RM {
+		return
+	}
 	if time.Now().Before(a.StartTime) {
-		a.Status = 0
+		a.Status = NS
 	} else if time.Now().Before(a.EndTime) {
-		a.Status = 1
+		a.Status = IP
 	} else {
-		a.Status = 2
+		a.Status = ED
 	}
 }
 
@@ -55,7 +61,7 @@ func (a *Activity) SetStatus() {
 type UpdateActivityDTO struct {
 	Name      *string    `json:"name"`
 	Content   *string    `json:"content"`
-	Stock     *int       `json:"stock"`
+	Total     *int       `json:"total"`
 	StartTime *time.Time `json:"startTime"`
 	EndTime   *time.Time `json:"endTime"`
 }
@@ -67,8 +73,8 @@ func (a *Activity) ApplyUpdates(dto *UpdateActivityDTO) {
 	if dto.Content != nil {
 		a.Content = dto.Content
 	}
-	if dto.Stock != nil {
-		a.Stock = *dto.Stock
+	if dto.Total != nil {
+		a.Total = *dto.Total
 	}
 	if dto.StartTime != nil {
 		a.StartTime = *dto.StartTime
@@ -76,5 +82,7 @@ func (a *Activity) ApplyUpdates(dto *UpdateActivityDTO) {
 	if dto.EndTime != nil {
 		a.EndTime = *dto.EndTime
 	}
-	a.SetStatus()
+	if a.Status != RM {
+		a.SetStatus()
+	}
 }

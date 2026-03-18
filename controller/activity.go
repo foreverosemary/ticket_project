@@ -30,6 +30,7 @@ func CreateActivity(c *gin.Context) {
 
 	// 创建活动
 	newActivity.SetStatus()
+	newActivity.Stock = newActivity.Total
 	if err := db.Create(&newActivity).Error; err != nil {
 		response.JsonErr(c, 500, "创建活动失败，数据库错误")
 		return
@@ -45,7 +46,7 @@ func CreateActivity(c *gin.Context) {
 
 func UpdateAllActivity(c *gin.Context) {
 	// 获取数据库及参数
-	db := dao.GetDB()
+	db := dao.GetDB().Unscoped()
 	var input models.Activity
 	if err := c.ShouldBindJSON(&input); err != nil {
 		response.JsonErr(c, 400, "参数获取错误")
@@ -70,21 +71,32 @@ func UpdateAllActivity(c *gin.Context) {
 	}
 
 	// 参数检验
+	if input.Total < activity.Total {
+		response.JsonErr(c, 400, "只允许扩大总量")
+		return
+	}
+
 	if err := input.Verify(); err != nil {
 		response.JsonErr(c, 400, err.Error())
 		return
 	}
 
-	// 全量覆盖
-	activity.Name = input.Name
-	activity.Content = input.Content
-	activity.Stock = input.Stock
-	activity.StartTime = input.StartTime
-	activity.EndTime = input.EndTime
-	activity.SetStatus() // 自动设置状态
-
 	// 更新活动
-	if err := db.Model(&activity).Updates(&activity).Error; err != nil {
+	if activity.Status != models.RM {
+		input.SetStatus()
+	} else {
+		input.Status = models.RM
+	}
+
+	if err := db.Model(&activity).Updates(gin.H{
+		"name":       input.Name,
+		"content":    input.Content,
+		"stock":      gorm.Expr("stock + ?", input.Total-activity.Total),
+		"total":      input.Total,
+		"start_time": input.StartTime,
+		"end_time":   input.EndTime,
+		"status":     input.Status,
+	}).Error; err != nil {
 		response.JsonErr(c, 500, "活动更新失败")
 		return
 	}
@@ -94,13 +106,14 @@ func UpdateAllActivity(c *gin.Context) {
 	response.JsonOK(c, "全量更新活动成功", gin.H{
 		"activityId": activity.ID,
 		"status":     activity.Status,
+		"stock":      activity.Stock,
 		"updatedAt":  activity.UpdatedAt.Format(response.FmtTime),
 	})
 }
 
 func UpdatePartialActivity(c *gin.Context) {
 	// 获取数据库及参数
-	db := dao.GetDB()
+	db := dao.GetDB().Unscoped()
 
 	var dto models.UpdateActivityDTO
 	if err := c.ShouldBindJSON(&dto); err != nil {
@@ -127,14 +140,42 @@ func UpdatePartialActivity(c *gin.Context) {
 	}
 
 	// 检验字段
+	if dto.Total != nil && *dto.Total < activity.Total {
+		response.JsonErr(c, 400, "只允许扩大总量")
+		return
+	}
+
+	// 准备更新 Map
+	oldTotal := activity.Total
 	activity.ApplyUpdates(&dto)
 	if err := activity.Verify(); err != nil {
 		response.JsonErr(c, 400, err.Error())
 		return
 	}
 
+	updates := make(map[string]interface{})
+	if dto.Name != nil {
+		updates["name"] = *dto.Name
+	}
+	if dto.Content != nil {
+		updates["content"] = dto.Content
+	}
+	if dto.Total != nil {
+		updates["total"] = *dto.Total
+		updates["stock"] = gorm.Expr("stock + ?", *dto.Total-oldTotal)
+	}
+	if dto.StartTime != nil {
+		updates["start_time"] = *dto.StartTime
+	}
+	if dto.EndTime != nil {
+		updates["end_time"] = *dto.EndTime
+	}
+	if activity.Status != models.RM {
+		updates["status"] = activity.Status
+	}
+
 	// 更新活动
-	if err := db.Model(&activity).Updates(&activity).Error; err != nil {
+	if err := db.Model(&activity).Updates(updates).Error; err != nil {
 		response.JsonErr(c, 500, "更新失败")
 		return
 	}
@@ -144,13 +185,14 @@ func UpdatePartialActivity(c *gin.Context) {
 	response.JsonOK(c, "部分更新成功", gin.H{
 		"activityId": activity.ID,
 		"status":     activity.Status,
+		"stock":      activity.Stock,
 		"updatedAt":  activity.UpdatedAt.Format(response.FmtTime),
 	})
 }
 
 func DeleteActivity(c *gin.Context) {
 	// 获取数据库及参数
-	db := dao.GetDB()
+	db := dao.GetDB().Unscoped()
 	activityId, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || activityId <= 0 {
 		response.JsonErr(c, 400, "活动ID错误")
@@ -168,8 +210,13 @@ func DeleteActivity(c *gin.Context) {
 		return
 	}
 
+	if activity.Status == models.RM {
+		response.JsonErr(c, 404, "活动重复删除")
+		return
+	}
+
 	// 删除活动
-	activity.Status = 3
+	activity.Status = models.RM
 	activity.DeletedAt = gorm.DeletedAt{
 		Time:  time.Now(),
 		Valid: true,
@@ -192,7 +239,7 @@ func DeleteActivity(c *gin.Context) {
 
 func GetActivities(c *gin.Context) {
 	// 获取数据库
-	db := dao.GetDB()
+	db := dao.GetDB().Unscoped()
 	queryDB := db.Model(&models.Activity{})
 
 	// 活动 ID 条件构建
@@ -213,17 +260,17 @@ func GetActivities(c *gin.Context) {
 	statusStr := c.QueryArray("status")
 	for _, s := range statusStr {
 		st, err := strconv.Atoi(s)
-		if err != nil || st < 0 || st > 3 {
+		if err != nil || st < models.NS || st > models.RM {
 			continue
 		}
-		if st == 3 && roleId != 1 {
+		if st == models.RM && roleId == models.RoleUser {
 			response.JsonErr(c, 403, "无权限获取已下架的活动")
 			return
 		}
 		statusList = append(statusList, st)
 	}
 	if len(statusList) == 0 {
-		statusList = []int{0, 1, 2}
+		statusList = []int{models.ED, models.IP, models.NS}
 	}
 	queryDB = queryDB.Where("`activities`.`status` IN (?)", statusList)
 
@@ -260,6 +307,7 @@ func GetActivities(c *gin.Context) {
 		activityList = append(activityList, gin.H{
 			"activityId": aty.ID,
 			"name":       aty.Name,
+			"total":      aty.Total,
 			"stock":      aty.Stock,
 			"status":     aty.Status,
 			"startTime":  aty.StartTime.Format(response.FmtTime),
@@ -277,7 +325,7 @@ func GetActivities(c *gin.Context) {
 
 func GetActivityDetail(c *gin.Context) {
 	// 获取数据库及参数
-	db := dao.GetDB()
+	db := dao.GetDB().Unscoped()
 	activityId, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || activityId <= 0 {
 		response.JsonErr(c, 400, "活动ID错误")
@@ -295,10 +343,17 @@ func GetActivityDetail(c *gin.Context) {
 		return
 	}
 
+	// 鉴权
+	if activity.Status == models.RM && c.GetInt("roleId") == models.RoleUser {
+		response.JsonErr(c, 403, "活动已下架")
+		return
+	}
+
 	// 构建成功响应
 	response.JsonOK(c, "成功返回活动详情", gin.H{
 		"activityId": activity.ID,
 		"name":       activity.Name,
+		"total":      activity.Total,
 		"stock":      activity.Stock,
 		"status":     activity.Status,
 		"startTime":  activity.StartTime.Format(response.FmtTime),
