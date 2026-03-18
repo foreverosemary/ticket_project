@@ -47,7 +47,7 @@ func Register(c *gin.Context) {
 	newUser := models.User{
 		Username: username,
 		Password: string(hashedPsw),
-		RoleID:   2,
+		RoleID:   models.RoleUser,
 	}
 	if err := db.Create(&newUser).Error; err != nil {
 		response.JsonErr(c, 500, "注册失败，数据库错误")
@@ -152,8 +152,8 @@ func GetMyActivities(c *gin.Context) {
 		Joins("INNER JOIN `tickets` ON `tickets`.`activity_id` = `activities`.`id`").
 		Joins("INNER JOIN `orders` ON `orders`.`id` = `tickets`.`order_id`").
 		Where("`orders`.`user_id` = ?", userId).
-		Where("`orders`.`status` = ?", 1).
-		Not("`activities`.`status` = ?", 3).
+		Where("`orders`.`status` = ?", models.PD).
+		Not("`activities`.`status` = ?", models.RM).
 		Distinct()
 
 	// 构建活动ID条件
@@ -193,7 +193,7 @@ func GetMyActivities(c *gin.Context) {
 
 	// 查询
 	var total int64
-	if err := queryDB.Count(&total).Error; err != nil {
+	if err := queryDB.Select("COUNT(DISTINCT `activities`.`id`)").Scan(&total).Error; err != nil {
 		response.JsonErr(c, 500, "查询失败")
 		return
 	}
@@ -271,7 +271,7 @@ func GetMyOrders(c *gin.Context) {
 
 	// 查询
 	var total int64
-	if err := queryDB.Count(&total).Error; err != nil {
+	if err := queryDB.Select("COUNT(DISTINCT `orders`.`id`)").Scan(&total).Error; err != nil {
 		response.JsonErr(c, 500, "查询失败")
 		return
 	}
@@ -393,7 +393,7 @@ func GetUserInfoByID(c *gin.Context) {
 	db := dao.GetDB()
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id <= 0 {
-		response.JsonErr(c, 400, "活动ID错误")
+		response.JsonErr(c, 400, "用户ID错误")
 		return
 	}
 
@@ -401,7 +401,7 @@ func GetUserInfoByID(c *gin.Context) {
 	var user models.User
 	if err := db.First(&user, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			response.JsonErr(c, 404, "活动不存在")
+			response.JsonErr(c, 404, "用户不存在")
 			return
 		}
 		response.JsonErr(c, 500, "查询失败")

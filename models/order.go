@@ -6,6 +6,8 @@ import (
 	"gorm.io/gorm"
 )
 
+const UP, PD, CL = 0, 1, 2
+
 type Order struct {
 	ID        int64          `json:"id"`
 	UserID    int64          `gorm:"not null;index:idx_user_status_delete,priority:1" json:"userId"`
