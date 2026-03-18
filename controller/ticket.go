@@ -23,7 +23,7 @@ func GetTicketDetail(c *gin.Context) {
 	var ticket models.Ticket
 	if err := db.Model(&models.Ticket{}).
 		Select("`tickets`.*, `activities`.`name` AS `activity_name`").
-		Joins("LEFT JOIN `activities` ON `activities`.`id` = `ticketd`.`activity_id`").
+		Joins("LEFT JOIN `activities` ON `activities`.`id` = `tickets`.`activity_id`").
 		First(&ticket, ticketId).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			response.JsonErr(c, 404, "票不存在")
@@ -66,13 +66,13 @@ func VerifyTicket(c *gin.Context) {
 
 	// 验参
 	switch ticket.Status {
-	case 1:
+	case models.US:
 		response.JsonErr(c, 400, "该票已被使用")
 		return
-	case 2:
+	case models.IV:
 		response.JsonErr(c, 400, "该票已作废")
 		return
-	case 0:
+	case models.UD:
 		// 正常并继续执行
 	default:
 		response.JsonErr(c, 400, "该票状态错误")
@@ -108,13 +108,13 @@ func InvalidateTicket(c *gin.Context) {
 	}
 
 	// 状态检验
-	if ticket.Status == 2 {
+	if ticket.Status == models.IV {
 		response.JsonErr(c, 400, "票已作废")
 		return
 	}
 
 	// 修改
-	if err := db.Model(&models.Ticket{}).Where("id = ?", ticketId).Update("status", 2).Error; err != nil {
+	if err := db.Model(&models.Ticket{}).Where("id = ?", ticketId).Update("status", models.IV).Error; err != nil {
 		response.JsonErr(c, 500, "作废票错误")
 		return
 	}
@@ -131,9 +131,7 @@ func InvalidateTicket(c *gin.Context) {
 func GetTickets(c *gin.Context) {
 	// 获取数据库
 	db := dao.GetDB()
-	queryDB := db.Model(&models.Ticket{}).
-		Select("`tickets`.*, `activities`.`name` AS `activity_name`").
-		Joins("LEFT JOIN `activities` ON `activities`.`id` = `tickets`.`activity_id`")
+	queryDB := db.Model(&models.Ticket{}).Joins("LEFT JOIN `activities` ON `activities`.`id` = `tickets`.`activity_id`")
 
 	// 构建订单 ID 条件
 	orderId, _ := strconv.ParseInt(c.DefaultQuery("orderId", "0"), 10, 64)
@@ -151,12 +149,12 @@ func GetTickets(c *gin.Context) {
 	var statusList []int
 	statusStr := c.QueryArray("status")
 	for _, s := range statusStr {
-		if st, err := strconv.Atoi(s); err == nil && st >= 0 && st < 3 {
+		if st, err := strconv.Atoi(s); err == nil && st >= models.UD && st < models.IV {
 			statusList = append(statusList, st)
 		}
 	}
 	if len(statusList) == 0 {
-		statusList = []int{0, 1}
+		statusList = []int{models.UD, models.US}
 	}
 	queryDB = queryDB.Where("`tickets`.`status` IN (?)", statusList)
 
@@ -172,7 +170,7 @@ func GetTickets(c *gin.Context) {
 
 	// 查询
 	var total int64
-	if err := queryDB.Count(&total).Error; err != nil {
+	if err := queryDB.Select("COUNT(DISTINCT `tickets`.`id`)").Scan(&total).Error; err != nil {
 		response.JsonErr(c, 500, "查询失败")
 		return
 	}
@@ -182,6 +180,7 @@ func GetTickets(c *gin.Context) {
 	if err := queryDB.
 		Limit(pageSize).Offset(offset).
 		Order("`tickets`.`status` ASC, `tickets`.`created_at` ASC").
+		Select("`tickets`.*, `activities`.`name` AS `activity_name`").
 		Find(&tickets).Error; err != nil {
 		response.JsonErr(c, 500, "查询失败")
 		return
@@ -230,7 +229,7 @@ func VerifyTicketNO(c *gin.Context) {
 	}
 
 	// 检票
-	if ticket.Status != 0 {
+	if ticket.Status != models.UD {
 		response.JsonErr(c, 400, "票无效-无法检票")
 		return
 	}
@@ -243,7 +242,7 @@ func VerifyTicketNO(c *gin.Context) {
 	}
 
 	// 构建成功响应
-	db.First(&ticket, ticket.ID)
+	ticket.Status = models.US
 	response.JsonOK(c, "检票成功", gin.H{
 		"ticketId":     ticket.ID,
 		"ticketNo":     ticket.TicketNo,

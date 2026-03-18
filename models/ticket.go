@@ -6,6 +6,8 @@ import (
 	"gorm.io/gorm"
 )
 
+const UD, US, IV = 0, 1, 2 // 未使用、已使用、已作废
+
 type Ticket struct {
 	ID         int64          `json:"id"`
 	TicketNo   string         `gorm:"type:varchar(32);not null;unique" json:"ticketNo"`
@@ -17,8 +19,8 @@ type Ticket struct {
 	DeletedAt  gorm.DeletedAt `gorm:"index:idx_status_deleted_at,priority:2" json:"deletedAt"`
 
 	// 临时字段
-	ActivityName string `gorm:"-" json:"activityName"`
-	UserID       int64  `gorm:"-" json:"userId"`
+	ActivityName string `gorm:"->" json:"activityName"`
+	UserID       int64  `gorm:"->" json:"userId"`
 }
 
 func (Ticket) TableName() string {

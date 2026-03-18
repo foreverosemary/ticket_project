@@ -18,8 +18,8 @@ type Order struct {
 	DeletedAt gorm.DeletedAt `gorm:"index:idx_user_status_delete,priority:3" json:"deletedAt"`
 
 	// 临时字段
-	ActivityId   int64  `gorm:"-" json:"activityId"`
-	ActivityName string `gorm:"-" json:"activityName"`
+	ActivityId   int64  `gorm:"->" json:"activityId"`
+	ActivityName string `gorm:"->" json:"activityName"`
 }
 
 func (Order) TableName() string {
