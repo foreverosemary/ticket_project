@@ -209,14 +209,14 @@ func GetMyActivities(c *gin.Context) {
 
 	// 成功响应
 	var activityList []gin.H
-	for _, aty := range activities {
+	for _, act := range activities {
 		activityList = append(activityList, gin.H{
-			"activityId": aty.ID,
-			"name":       aty.Name,
-			"stock":      aty.Stock,
-			"status":     aty.Status,
-			"startTime":  aty.StartTime.Format(response.FmtTime),
-			"endTime":    aty.EndTime.Format(response.FmtTime),
+			"activityId": act.ID,
+			"name":       act.Name,
+			"stock":      act.Stock,
+			"status":     act.Status,
+			"startTime":  act.StartTime.Format(response.FmtTime),
+			"endTime":    act.EndTime.Format(response.FmtTime),
 		})
 	}
 
