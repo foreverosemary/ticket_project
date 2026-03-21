@@ -22,6 +22,19 @@ type Order struct {
 	ActivityName string `gorm:"->" json:"activityName"`
 }
 
+type OrderQuery struct {
+	UserID     int64
+	ActivityID int64
+	StatusList []int
+	PageNum    int
+	PageSize   int
+}
+
+type OrderList struct {
+	Orders []Order
+	Total  int64
+}
+
 func (Order) TableName() string {
 	return "orders"
 }

@@ -23,6 +23,20 @@ type Ticket struct {
 	UserID       int64  `gorm:"->" json:"userId"`
 }
 
+type TicketQuery struct {
+	UserID     int64
+	OrderID    int64
+	ActivityID int64
+	StatusList []int
+	PageNum    int
+	PageSize   int
+}
+
+type TicketList struct {
+	Tickets []Ticket
+	Total   int64
+}
+
 func (Ticket) TableName() string {
 	return "tickets"
 }

@@ -1,21 +1,24 @@
 package controller
 
 import (
+	"errors"
 	"strconv"
 	"ticket/dao"
+	"ticket/logic"
 	"ticket/models"
-	"ticket/utils"
 	"ticket/utils/response"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+)
+
+var (
+	userLogic logic.UserLogic
 )
 
 // Public
 func Register(c *gin.Context) {
-	// 数据库及参数获取
-	db := dao.GetDB()
+	// 参数获取
 	username := c.PostForm("username")
 	password := c.PostForm("password")
 
@@ -30,28 +33,10 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	// 数据库查找
-	if err := db.First(&models.User{}, "username = ?", username).Error; err == nil {
-		response.JsonErr(c, 409, "用户名已存在")
-		return
-	}
-
-	// 密码加密
-	hashedPsw, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	// 调用逻辑层
+	newUser, err := userLogic.Register(username, password)
 	if err != nil {
-		response.JsonErr(c, 500, "密码加密失败")
-		return
-	}
-
-	// 构造用户数据并插入
-	newUser := models.User{
-		Username: username,
-		Password: string(hashedPsw),
-		RoleID:   models.RoleUser,
-	}
-	if err := db.Create(&newUser).Error; err != nil {
-		response.JsonErr(c, 500, "注册失败，数据库错误")
-		return
+		response.JsonErr(c, 400, err.Error())
 	}
 
 	// 成功注册响应
@@ -65,45 +50,22 @@ func Register(c *gin.Context) {
 
 func Login(c *gin.Context) {
 	// 数据库及参数获取
-	db := dao.GetDB()
 	username := c.PostForm("username")
 	password := c.PostForm("password")
 
-	// 检查用户名是否存在
-	var user models.User
-	if err := db.First(&user, "username = ?", username).Error; err != nil {
-		response.JsonErr(c, 401, "用户不存在")
-		return
-	}
-
-	// 检查密码是否正确
-	err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
+	// 调用逻辑层
+	userInfo, err := userLogic.Login(c, username, password)
 	if err != nil {
-		response.JsonErr(c, 401, "密码错误")
-		return
-	}
-
-	// 生成 Token
-	token, err := utils.GenerateToken(user.ID, user.RoleID)
-	if err != nil {
-		response.JsonErr(c, 500, "生成 Token 失败")
-		return
-	}
-
-	// 查询角色
-	var role models.Role
-	if err := db.First(&role, user.RoleID).Error; err != nil {
-		response.JsonErr(c, 500, "角色信息不存在")
-		return
+		response.JsonErr(c, 400, err.Error())
 	}
 
 	// 成功登录响应
 	response.JsonOK(c, "登录成功", gin.H{
-		"userId":   user.ID,
-		"username": user.Username,
-		"roleId":   user.RoleID,
-		"roleName": role.Name,
-		"token":    token,
+		"userId":   userInfo["userId"],
+		"username": userInfo["username"],
+		"roleId":   userInfo["roleId"],
+		"roleName": userInfo["roleName"],
+		"token":    userInfo["token"],
 	})
 }
 
@@ -142,33 +104,18 @@ func GetMyInfo(c *gin.Context) {
 }
 
 func GetMyActivities(c *gin.Context) {
-	// 获取数据库
-	db := dao.GetDB()
-	queryDB := db.Model(&models.Activity{})
+	var q models.ActivityQuery
 
-	// 构建用户ID条件
-	userId := c.GetInt64("userId")
-	queryDB = queryDB.
-		Joins("INNER JOIN `tickets` ON `tickets`.`activity_id` = `activities`.`id`").
-		Joins("INNER JOIN `orders` ON `orders`.`id` = `tickets`.`order_id`").
-		Where("`orders`.`user_id` = ?", userId).
-		Where("`orders`.`status` = ?", models.PD).
-		Not("`activities`.`status` = ?", models.RM).
-		Distinct()
+	// 构建用户ID
+	q.UserID = c.GetInt64("userId")
 
-	// 构建活动ID条件
-	activityId, _ := strconv.ParseInt(c.DefaultQuery("id", "0"), 10, 64)
-	if activityId > 0 {
-		queryDB = queryDB.Where("`activities`.`id` = ?", activityId)
-	}
+	// 构建活动ID
+	q.ActivityID, _ = strconv.ParseInt(c.DefaultQuery("id", "0"), 10, 64)
 
-	// 构建活动名称条件
-	name := c.DefaultQuery("name", "")
-	if name != "" {
-		queryDB = queryDB.Where("`activities`.`name` LIKE ?", "%"+name+"%")
-	}
+	// 构建活动名称
+	q.Name = c.DefaultQuery("name", "")
 
-	// 构建状态条件(0-未开始 1-进行中 2-已结束 3-已下架)
+	// 状态条件(0-未开始 1-进行中 2-已结束 3-已下架)
 	var statusList []int
 	statusStr := c.QueryArray("status")
 	for _, s := range statusStr {
@@ -179,38 +126,22 @@ func GetMyActivities(c *gin.Context) {
 	if len(statusList) == 0 {
 		statusList = []int{0, 1, 2}
 	}
-	queryDB = queryDB.Where("`activities`.`status` IN (?)", statusList)
+	q.StatusList = statusList
 
-	// 分页构建
-	pageNum, err := strconv.Atoi(c.DefaultQuery("pageNum", "1"))
-	if err != nil || pageNum < 1 {
-		pageNum = 1
-	}
-	pageSize, err := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
-	if err != nil || pageSize < 1 || pageSize > 100 {
-		pageSize = 10
-	}
+	// 分页
+	q.PageNum, q.PageSize = response.GetPage(c)
 
-	// 查询
-	var total int64
-	if err := queryDB.Select("COUNT(DISTINCT `activities`.`id`)").Scan(&total).Error; err != nil {
-		response.JsonErr(c, 500, "查询失败")
-		return
-	}
-	var activities []models.Activity
-	offset := (pageNum - 1) * pageSize
-	if err := queryDB.
-		Limit(pageSize).Offset(offset).
-		Order("`activities`.`start_time` ASC").
-		Find(&activities).Error; err != nil {
-		response.JsonErr(c, 500, "查询失败")
+	// 调用逻辑层
+	activityList, err := userLogic.GetMyActivities(q)
+	if err != nil {
+		response.JsonErr(c, 400, err.Error())
 		return
 	}
 
 	// 成功响应
-	var activityList []gin.H
-	for _, act := range activities {
-		activityList = append(activityList, gin.H{
+	var activities []gin.H
+	for _, act := range activityList.Activities {
+		activities = append(activities, gin.H{
 			"activityId": act.ID,
 			"name":       act.Name,
 			"stock":      act.Stock,
@@ -221,32 +152,22 @@ func GetMyActivities(c *gin.Context) {
 	}
 
 	response.JsonOK(c, "成功返回活动列表", gin.H{
-		"activities": activityList,
-		"total":      total,
-		"pageNum":    pageNum,
-		"pageSize":   pageSize,
+		"activities": activities,
+		"total":      activityList.Total,
+		"pageNum":    q.PageNum,
+		"pageSize":   q.PageSize,
 	})
 }
 
 func GetMyOrders(c *gin.Context) {
-	// 获取数据库
-	db := dao.GetDB()
-	queryDB := db.Model(&models.Order{})
-
 	// 构建用户ID条件
-	userId := c.GetInt64("userId")
-	queryDB = queryDB.
-		Where("`orders`.`user_id` = ?", userId).
-		Joins("LEFT JOIN `tickets` ON `tickets`.`order_id` = `orders`.`id`").
-		Joins("LEFT JOIN `activities` ON `activities`.`id` = `tickets`.`activity_id`")
+	var q models.OrderQuery
+	q.UserID = c.GetInt64("userId")
 
-	// 构建活动ID条件
-	activityId, _ := strconv.ParseInt(c.DefaultQuery("activityId", "0"), 10, 64)
-	if activityId > 0 {
-		queryDB = queryDB.Where("`tickets`.`activity_id` = ?", activityId)
-	}
+	// 活动ID条件
+	q.ActivityID, _ = strconv.ParseInt(c.DefaultQuery("activityId", "0"), 10, 64)
 
-	// 构建订单状态条件(0-未支付 1-已支付 2-已取消 3-已过期)
+	// 订单状态条件(0-未支付 1-已支付 2-已取消 3-已过期)
 	var statusList []int
 	statusStr := c.QueryArray("status")
 	for _, s := range statusStr {
@@ -257,39 +178,22 @@ func GetMyOrders(c *gin.Context) {
 	if len(statusList) == 0 {
 		statusList = []int{0, 1}
 	}
-	queryDB = queryDB.Where("`orders`.`status` IN (?)", statusList)
+	q.StatusList = statusList
 
-	// 分页构建
-	pageNum, err := strconv.Atoi(c.DefaultQuery("pageNum", "1"))
-	if err != nil || pageNum < 1 {
-		pageNum = 1
-	}
-	pageSize, err := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
-	if err != nil || pageSize < 1 || pageSize > 100 {
-		pageSize = 10
-	}
+	// 分页
+	q.PageNum, q.PageSize = response.GetPage(c)
 
-	// 查询
-	var total int64
-	if err := queryDB.Select("COUNT(DISTINCT `orders`.`id`)").Scan(&total).Error; err != nil {
-		response.JsonErr(c, 500, "查询失败")
-		return
-	}
-	var orders []models.Order
-	offset := (pageNum - 1) * pageSize
-	if err := queryDB.
-		Limit(pageSize).Offset(offset).
-		Order("`orders`.`created_at` DESC").
-		Select("`orders`.*, `activities`.`id` AS `activity_id`, `activities`.`name` AS `activity_name`").
-		Find(&orders).Error; err != nil {
-		response.JsonErr(c, 500, "查询失败")
+	// 调用逻辑层
+	orderList, err := userLogic.GetMyOrders(q)
+	if err != nil {
+		response.JsonErr(c, 400, err.Error())
 		return
 	}
 
 	// 构建成功响应
-	var orderList []gin.H
-	for _, order := range orders {
-		orderList = append(orderList, gin.H{
+	var orders []gin.H
+	for _, order := range orderList.Orders {
+		orders = append(orders, gin.H{
 			"orderId":      order.ID,
 			"status":       order.Status,
 			"activityId":   order.ActivityId,
@@ -300,35 +204,23 @@ func GetMyOrders(c *gin.Context) {
 	}
 
 	response.JsonOK(c, "返回成功", gin.H{
-		"orders":   orderList,
-		"total":    total,
-		"pageNum":  pageNum,
-		"pageSize": pageSize,
+		"orders":   orders,
+		"total":    orderList.Total,
+		"pageNum":  q.PageNum,
+		"pageSize": q.PageSize,
 	})
 }
 
 func GetMyTickets(c *gin.Context) {
-	// 获取数据库
-	db := dao.GetDB()
-	queryDB := db.Model(&models.Ticket{})
+	// 用户ID条件
+	var q models.TicketQuery
+	q.UserID = c.GetInt64("userId")
 
-	// 构建用户ID条件
-	userId := c.GetInt64("userId")
-	queryDB = queryDB.
-		Where("`tickets`.`user_id` = ?", userId).
-		Joins("LEFT JOIN `activities` ON `activities`.`id` = `tickets`.`activity_id`")
-
-	// 构建订单ID条件
-	orderId, err := strconv.ParseInt(c.DefaultQuery("orderId", "0"), 10, 64)
-	if err == nil && orderId > 0 {
-		queryDB = queryDB.Where("`tickets`.`order_id` = ?", orderId)
-	}
+	// 订单ID条件
+	q.OrderID, _ = strconv.ParseInt(c.DefaultQuery("orderId", "0"), 10, 64)
 
 	// 构建活动ID条件
-	activityId, err := strconv.ParseInt(c.DefaultQuery("activityId", "0"), 10, 64)
-	if err == nil && activityId > 0 {
-		queryDB = queryDB.Where("`tickets`.`activity_id` = ?", activityId)
-	}
+	q.ActivityID, _ = strconv.ParseInt(c.DefaultQuery("activityId", "0"), 10, 64)
 
 	// 构建状态条件
 	var statusList []int
@@ -341,39 +233,22 @@ func GetMyTickets(c *gin.Context) {
 	if len(statusList) == 0 {
 		statusList = []int{0}
 	}
-	queryDB = queryDB.Where("`tickets`.`status` IN (?)", statusList)
+	q.StatusList = statusList
 
-	// 分页构建
-	pageNum, err := strconv.Atoi(c.DefaultQuery("pageNum", "1"))
-	if err != nil || pageNum < 1 {
-		pageNum = 1
-	}
-	pageSize, err := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
-	if err != nil || pageSize < 1 || pageSize > 100 {
-		pageSize = 10
-	}
+	// 分页
+	q.PageNum, q.PageSize = response.GetPage(c)
 
-	// 查询
-	var total int64
-	if err := queryDB.Count(&total).Error; err != nil {
-		response.JsonErr(c, 500, "查询失败")
-		return
-	}
-	var tickets []models.Ticket
-	offset := (pageNum - 1) * pageSize
-	if err := queryDB.
-		Limit(pageSize).Offset(offset).
-		Select("`tickets`.*, `activities`.`name` AS `activity_name`").
-		Order("`tickets`.`status` ASC, `tickets`.`updated_at` ASC").
-		Find(&tickets).Error; err != nil {
-		response.JsonErr(c, 500, "查询失败")
+	// 调用逻辑层
+	ticketList, err := userLogic.GetMyTickets(q)
+	if err != nil {
+		response.JsonErr(c, 400, err.Error())
 		return
 	}
 
 	// 构建成功响应体
-	var ticketList []gin.H
-	for _, tkt := range tickets {
-		ticketList = append(ticketList, gin.H{
+	var tickets []gin.H
+	for _, tkt := range ticketList.Tickets {
+		tickets = append(tickets, gin.H{
 			"ticketId":     tkt.ID,
 			"activityId":   tkt.ActivityID,
 			"activityName": tkt.ActivityName,
@@ -381,36 +256,29 @@ func GetMyTickets(c *gin.Context) {
 		})
 	}
 	response.JsonOK(c, "成功返回票列表", gin.H{
-		"tickets":  ticketList,
-		"total":    total,
-		"pageNum":  pageNum,
-		"pageSize": pageSize,
+		"tickets":  tickets,
+		"total":    ticketList.Total,
+		"pageNum":  q.PageNum,
+		"pageSize": q.PageSize,
 	})
 }
 
 func GetUserInfoByID(c *gin.Context) {
-	// 获取数据库及参数
-	db := dao.GetDB()
+	// 获取参数
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id <= 0 {
 		response.JsonErr(c, 400, "用户ID错误")
 		return
 	}
 
-	// 查找用户及角色
-	var user models.User
-	if err := db.First(&user, id).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+	// 调用逻辑层
+	user, role, err := userLogic.GetUserInfoByID(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.JsonErr(c, 404, "用户不存在")
 			return
 		}
-		response.JsonErr(c, 500, "查询失败")
-		return
-	}
-
-	var role models.Role
-	if err := db.First(&role, user.RoleID).Error; err != nil {
-		response.JsonErr(c, 500, "角色信息不存在")
+		response.JsonErr(c, 400, err.Error())
 		return
 	}
 
@@ -432,15 +300,7 @@ func GetUserInfoByID(c *gin.Context) {
 func GetRoles(c *gin.Context) {
 	// 获取数据库及参数
 	db := dao.GetDB()
-	pageNum, err := strconv.Atoi(c.DefaultQuery("pageNum", "1"))
-	if err != nil || pageNum < 1 {
-		pageNum = 1
-	}
-
-	pageSize, err := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
-	if err != nil || pageSize < 1 || pageSize > 100 {
-		pageSize = 10
-	}
+	pageNum, pageSize := response.GetPage(c)
 
 	// 查询总条数
 	var total int64
