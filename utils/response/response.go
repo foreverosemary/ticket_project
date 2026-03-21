@@ -1,6 +1,7 @@
 package response
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -37,4 +38,16 @@ func JsonOK(c *gin.Context, msg string, data interface{}) {
 		Data:      data,
 		Timestamp: time.Now().UnixMilli(),
 	})
+}
+
+func GetPage(c *gin.Context) (int, int) {
+	pageNum, err := strconv.Atoi(c.DefaultQuery("pageNum", "1"))
+	if err != nil || pageNum < 1 {
+		pageNum = 1
+	}
+	pageSize, err := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
+	if err != nil || pageSize < 1 || pageSize > 100 {
+		pageSize = 10
+	}
+	return pageNum, pageSize
 }

@@ -3,7 +3,6 @@ package controller
 import (
 	"errors"
 	"strconv"
-	"ticket/dao"
 	"ticket/logic"
 	"ticket/models"
 	"ticket/utils/response"
@@ -140,23 +139,17 @@ func DeleteActivity(c *gin.Context) {
 }
 
 func GetActivities(c *gin.Context) {
-	// 获取数据库
-	db := dao.GetDB().Unscoped()
-	queryDB := db.Model(&models.Activity{})
+	var q models.ActivityQuery
 
-	// 活动 ID 条件构建
+	// 活动 ID 条件
 	activityId, _ := strconv.ParseInt(c.DefaultQuery("id", "0"), 10, 64)
-	if activityId > 0 {
-		queryDB = queryDB.Where("`activities`.`id` = ?", activityId)
-	}
+	q.ActivityID = activityId
 
-	// 活动名称条件构建
+	// 活动名称条件
 	name := c.DefaultQuery("name", "")
-	if name != "" {
-		queryDB = queryDB.Where("`activities`.`name` LIKE ?", "%"+name+"%")
-	}
+	q.Name = name
 
-	// 活动状态条件构建
+	// 活动状态条件
 	roleId := c.GetInt64("roleId")
 	var statusList []int
 	statusStr := c.QueryArray("status")
@@ -174,39 +167,22 @@ func GetActivities(c *gin.Context) {
 	if len(statusList) == 0 {
 		statusList = []int{models.ED, models.IP, models.NS}
 	}
-	queryDB = queryDB.Where("`activities`.`status` IN (?)", statusList)
+	q.StatusList = statusList
 
-	// 分页构建
-	pageNum, err := strconv.Atoi(c.DefaultQuery("pageNum", "1"))
-	if err != nil || pageNum < 1 {
-		pageNum = 1
-	}
-	pageSize, err := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
-	if err != nil || pageSize < 1 || pageSize > 100 {
-		pageSize = 10
-	}
+	// 分页
+	q.PageNum, q.PageSize = response.GetPage(c)
 
-	// 查询
-	var total int64
-	if err := queryDB.Count(&total).Error; err != nil {
-		response.JsonErr(c, 500, "查询失败")
-		return
-	}
-
-	var activities []models.Activity
-	offset := (pageNum - 1) * pageSize
-	if err := queryDB.
-		Limit(pageSize).Offset(offset).
-		Order("`activities`.`status` ASC, `activities`.`start_time` ASC").
-		Find(&activities).Error; err != nil {
-		response.JsonErr(c, 500, "查询失败")
+	// 调用逻辑层
+	activityList, err := actLogic.GetActivities(c, q)
+	if err != nil {
+		response.JsonErr(c, 400, err.Error())
 		return
 	}
 
 	// 构建成功响应
-	var activityList []gin.H
-	for _, act := range activities {
-		activityList = append(activityList, gin.H{
+	var activities []gin.H
+	for _, act := range activityList.Activities {
+		activities = append(activities, gin.H{
 			"activityId": act.ID,
 			"name":       act.Name,
 			"total":      act.Total,
@@ -218,10 +194,10 @@ func GetActivities(c *gin.Context) {
 	}
 
 	response.JsonOK(c, "成功返回活动列表", gin.H{
-		"activities": activityList,
-		"total":      total,
-		"pageNum":    pageNum,
-		"pageSize":   pageSize,
+		"activities": activities,
+		"total":      activityList.Total,
+		"pageNum":    q.PageNum,
+		"pageSize":   q.PageSize,
 	})
 }
 

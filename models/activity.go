@@ -24,6 +24,20 @@ type Activity struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"deletedAt"`
 }
 
+type ActivityQuery struct {
+	UserID     int64
+	ActivityID int64
+	Name       string
+	StatusList []int
+	PageNum    int
+	PageSize   int
+}
+
+type ActivityList struct {
+	Activities []Activity
+	Total      int64
+}
+
 func (Activity) TableName() string {
 	return "activities"
 }

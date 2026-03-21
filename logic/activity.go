@@ -259,10 +259,43 @@ func (actLogic *ActivityLogic) DeleteActivity(c context.Context, id int64) (*mod
 
 	// 获取最新结果
 	if err := db.Unscoped().First(&activity, id).Error; err != nil {
-		return nil, errors.New("删除活动成功但是返回数据失败")
+		return nil, errors.New("删除活动成功但是返回数据失败" + err.Error())
 	}
 
 	return &activity, nil
+}
+
+func (actLogic *ActivityLogic) GetActivities(c context.Context, q models.ActivityQuery) (*models.ActivityList, error) {
+	db := dao.GetDB().Unscoped()
+
+	// 构建查询
+	queryDB := db.Model(&models.Activity{})
+
+	if q.ActivityID > 0 {
+		queryDB = queryDB.Where("id = ?", q.ActivityID)
+	}
+
+	if q.Name != "" {
+		queryDB = queryDB.Where("name LIKE ?", "%"+q.Name+"%")
+	}
+
+	queryDB = queryDB.Where("status IN (?)", q.StatusList)
+
+	// 查询
+	var activityList models.ActivityList
+	if err := queryDB.Count(&activityList.Total).Error; err != nil {
+		return nil, errors.New("查询失败:" + err.Error())
+	}
+
+	if err := queryDB.
+		Limit(q.PageSize).
+		Offset((q.PageNum - 1) * q.PageSize).
+		Order("status ASC, start_time ASC").
+		Find(&activityList.Activities).Error; err != nil {
+		return nil, errors.New("查询活动列表失败:" + err.Error())
+	}
+
+	return &activityList, nil
 }
 
 func (actLogic *ActivityLogic) GetActivityDetail(c context.Context, id int64) (*models.Activity, error) {
