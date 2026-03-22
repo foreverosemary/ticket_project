@@ -19,6 +19,11 @@ func main() {
 		log.Fatalf("MySQL 错误: %v", err)
 	}
 
+	// 初始化 Redis
+	if err := dao.InitRedis(); err != nil {
+		log.Fatalf("Redis 错误: %v", err)
+	}
+
 	// 初始化路由
 	router.InitRouter()
 	r := router.GetRouter()

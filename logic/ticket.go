@@ -92,11 +92,10 @@ func (l *TicketLogic) GetTickets(q models.TicketQuery) (*models.TicketList, erro
 	queryDB = queryDB.Where("`tickets`.`status` IN (?)", q.StatusList)
 
 	var ticketList models.TicketList
-	if err := queryDB.Select("COUNT(DISTINCT `tickets`.`id`)").Scan(&ticketList.Total).Error; err != nil {
+	if err := queryDB.Distinct("`tickets`.`id`").Count(&ticketList.Total).Error; err != nil {
 		return nil, errors.New(err.Error() + "查询错误")
 	}
-	if err := queryDB.
-		Limit(q.PageSize).Offset((q.PageNum - 1) * q.PageSize).
+	if err := queryDB.Limit(q.PageSize).Offset((q.PageNum - 1) * q.PageSize).
 		Order("`tickets`.`status` ASC, `tickets`.`created_at` ASC").
 		Select("`tickets`.*, `activities`.`name` AS `activity_name`").
 		Find(&ticketList.Tickets).Error; err != nil {

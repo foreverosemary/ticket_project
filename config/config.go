@@ -52,7 +52,7 @@ func (m *MySQLConfig) DSN() string {
 }
 
 func (r *RedisConfig) URL() string {
-	return fmt.Sprintf("redis://%s@%s/%d", r.Password, r.Addr, r.DB)
+	return fmt.Sprintf("redis://:%s@%s/%d", r.Password, r.Addr, r.DB)
 }
 
 var (

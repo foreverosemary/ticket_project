@@ -7,8 +7,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const FmtTime = "2006-01-02 15:04:05"
-
 type Response struct {
 	Code      int         `json:"code"`
 	Msg       string      `json:"msg"`

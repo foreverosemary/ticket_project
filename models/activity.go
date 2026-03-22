@@ -2,6 +2,7 @@ package models
 
 import (
 	"errors"
+	"ticket/utils/response"
 	"time"
 
 	"gorm.io/gorm"
@@ -10,18 +11,18 @@ import (
 const NS, IP, ED, RM = 0, 1, 2, 3
 
 type Activity struct {
-	ID        int64          `json:"id"`
-	Name      string         `gorm:"type:varchar(30);not null" json:"name"`
-	Content   *string        `gorm:"type:text" json:"content"`
-	Stock     int            `gorm:"default:0" json:"stock"`
-	Total     int            `gorm:"default:0" json:"total"`
-	Status    int8           `gorm:"type:tinyint;not null;default:0;index:idx_status_end_time,priority:1" json:"status"`
-	StartTime time.Time      `gorm:"not null" json:"startTime"`
-	EndTime   time.Time      `gorm:"not null;index:idx_status_end_time,priority:2" json:"endTime"`
-	CreatorID int64          `gorm:"not null;index" json:"creatorId"`
-	CreatedAt time.Time      `json:"createdAt"`
-	UpdatedAt time.Time      `json:"updatedAt"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"deletedAt"`
+	ID        int64              `json:"id"`
+	Name      string             `gorm:"type:varchar(30);not null" json:"name"`
+	Content   *string            `gorm:"type:text" json:"content"`
+	Stock     int                `gorm:"default:0" json:"stock"`
+	Total     int                `gorm:"default:0" json:"total"`
+	Status    int8               `gorm:"type:tinyint;not null;default:0;index:idx_status_end_time,priority:1" json:"status"`
+	StartTime response.LocalTime `gorm:"not null" json:"startTime"`
+	EndTime   response.LocalTime `gorm:"not null;index:idx_status_end_time,priority:2" json:"endTime"`
+	CreatorID int64              `gorm:"not null;index" json:"creatorId"`
+	CreatedAt time.Time          `json:"createdAt"`
+	UpdatedAt time.Time          `json:"updatedAt"`
+	DeletedAt gorm.DeletedAt     `gorm:"index" json:"deletedAt"`
 }
 
 type ActivityQuery struct {
@@ -62,9 +63,9 @@ func (a *Activity) SetStatus() {
 	if a.Status == RM {
 		return
 	}
-	if time.Now().Before(a.StartTime) {
+	if time.Now().Before(a.StartTime.ToTime()) {
 		a.Status = NS
-	} else if time.Now().Before(a.EndTime) {
+	} else if time.Now().Before(a.EndTime.ToTime()) {
 		a.Status = IP
 	} else {
 		a.Status = ED
@@ -73,11 +74,11 @@ func (a *Activity) SetStatus() {
 
 // 用于部分更新
 type UpdateActivityDTO struct {
-	Name      *string    `json:"name"`
-	Content   *string    `json:"content"`
-	Total     *int       `json:"total"`
-	StartTime *time.Time `json:"startTime"`
-	EndTime   *time.Time `json:"endTime"`
+	Name      *string             `json:"name"`
+	Content   *string             `json:"content"`
+	Total     *int                `json:"total"`
+	StartTime *response.LocalTime `json:"startTime"`
+	EndTime   *response.LocalTime `json:"endTime"`
 }
 
 func (a *Activity) ApplyUpdates(dto *UpdateActivityDTO) {

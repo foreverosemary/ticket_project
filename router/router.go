@@ -96,13 +96,13 @@ func InitRouter() {
 		}
 
 		// 管理员接口
-		adminGroup := r.Group("")
+		adminGroup := ticketGroup.Group("")
 		adminGroup.Use(utils.AdminAuth())
 		{
-			adminGroup.PATCH("/:id/verify", controller.VerifyTicket)
+			adminGroup.GET("/:id/verify", controller.VerifyTicket)
 			adminGroup.PATCH("/:id/invalidate", controller.InvalidateTicket)
 			adminGroup.GET("", controller.GetTickets)
-			adminGroup.GET("/check", controller.VerifyTicketNO)
+			adminGroup.PATCH("/check", controller.VerifyTicketNO)
 		}
 	}
 }

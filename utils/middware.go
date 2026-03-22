@@ -2,6 +2,8 @@ package utils
 
 import (
 	"os"
+	"strings"
+	"ticket/models"
 	"ticket/utils/response"
 	"time"
 
@@ -72,6 +74,12 @@ func JWTAuth() gin.HandlerFunc {
 			return
 		}
 
+		// 兼容 Bearer
+		parts := strings.Split(tokenStr, " ")
+		if len(parts) == 2 && parts[0] == "Bearer" {
+			tokenStr = parts[1]
+		}
+
 		// 解析 Token
 		claims, err := ParseToken(tokenStr)
 
@@ -82,24 +90,26 @@ func JWTAuth() gin.HandlerFunc {
 		}
 
 		// 滑动过期
-		expireTime := claims.ExpiresAt.Time
-		now := time.Now()
+		if claims.ExpiresAt != nil {
+			expireTime := claims.ExpiresAt.Time
+			now := time.Now()
 
-		if expireTime.Sub(now) < 30*time.Minute {
-			newToken, _ := GenerateToken(claims.UserID, claims.RoleID)
-			c.Header("New_Token", newToken)
+			if expireTime.Sub(now) < 30*time.Minute {
+				newToken, _ := GenerateToken(claims.UserID, claims.RoleID)
+				c.Header("New_Token", newToken)
+			}
 		}
 
 		// 存取用户信息
-		c.Set("userID", claims.UserID)
-		c.Set("roleID", claims.RoleID)
+		c.Set("userId", claims.UserID)
+		c.Set("roleId", claims.RoleID)
 		c.Next()
 	}
 }
 
 func Permissed(c *gin.Context) {
-	roleID := c.GetInt("roleID")
-	if roleID != 1 {
+	roleID := c.GetInt("roleId")
+	if roleID != models.RoleAdmin {
 		response.JsonErr(c, 403, "无权限")
 		c.Abort()
 	}

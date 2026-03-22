@@ -47,7 +47,7 @@ func (l *UserLogic) Login(c context.Context, username, password string) (map[str
 	// 检查用户名
 	var user models.User
 	if err := db.First(&user, "username = ?", username).Error; err != nil {
-		return nil, errors.New("用户不存在")
+		return nil, err
 	}
 
 	// 验证密码
@@ -107,12 +107,11 @@ func (l *UserLogic) GetMyActivities(q models.ActivityQuery) (*models.ActivityLis
 
 	// 查询
 	var activityList models.ActivityList
-	if err := queryDB.Select("COUNT(DISTINCT `activities`.`id`)").Scan(&activityList.Total).Error; err != nil {
-		return nil, errors.New("查询错误:" + err.Error())
+	if err := queryDB.Distinct("`activities`.`id`").Count(&activityList.Total).Error; err != nil {
+		return nil, errors.New("查询总数错误:" + err.Error())
 	}
 
-	if err := queryDB.
-		Limit(q.PageSize).Offset((q.PageNum - 1) * q.PageSize).
+	if err := queryDB.Limit(q.PageSize).Offset((q.PageNum - 1) * q.PageSize).
 		Order("`activities`.`start_time` ASC").
 		Select("`activities`.*").
 		Find(&activityList.Activities).Error; err != nil {
@@ -135,7 +134,7 @@ func (l *UserLogic) GetMyOrders(q models.OrderQuery) (*models.OrderList, error) 
 	queryDB = queryDB.Where("`orders`.`status` IN (?)", q.StatusList)
 
 	var orderList models.OrderList
-	if err := queryDB.Select("COUNT(DISTINCT `orders`.`id`)").Scan(&orderList.Total).Error; err != nil {
+	if err := queryDB.Distinct("`orders`.`id`").Count(&orderList.Total).Error; err != nil {
 		return nil, errors.New("查询错误:" + err.Error())
 	}
 
@@ -152,11 +151,12 @@ func (l *UserLogic) GetMyOrders(q models.OrderQuery) (*models.OrderList, error) 
 func (l *UserLogic) GetMyTickets(q models.TicketQuery) (*models.TicketList, error) {
 	db := dao.GetDB()
 	queryDB := db.Model(&models.Ticket{}).
-		Where("`tickets`.`user_id` = ?", q.UserID).
-		Joins("LEFT JOIN `activities` ON `activities`.`id` = `tickets`.`activity_id`")
+		Joins("LEFT JOIN `orders` ON `orders`.`id` = `tickets`.`order_id`").
+		Joins("LEFT JOIN `activities` ON `activities`.`id` = `tickets`.`activity_id`").
+		Where("`orders`.`user_id` = ?", q.UserID)
 
 	if q.OrderID > 0 {
-		queryDB = queryDB.Where("`tickets`.`order_id` = ?", q.OrderID)
+		queryDB = queryDB.Where("`orders`.`id` = ?", q.OrderID)
 	}
 
 	if q.ActivityID > 0 {
@@ -165,7 +165,7 @@ func (l *UserLogic) GetMyTickets(q models.TicketQuery) (*models.TicketList, erro
 	queryDB = queryDB.Where("`tickets`.`status` IN (?)", q.StatusList)
 
 	var ticketList models.TicketList
-	if err := queryDB.Select("COUNT(DISTINCT `tickets`.`id`)").Scan(&ticketList.Total).Error; err != nil {
+	if err := queryDB.Distinct("`tickets`.`id`").Count(&ticketList.Total).Error; err != nil {
 		return nil, errors.New("查询错误:" + err.Error())
 	}
 

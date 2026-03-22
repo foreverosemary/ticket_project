@@ -10,7 +10,6 @@ import (
 	"ticket/models"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
@@ -70,15 +69,16 @@ func (actLogic *ActivityLogic) UpdateAllActivity(c context.Context, id int64, in
 			input.Status = models.RM
 		}
 
-		if err := tx.Model(&activity).Updates(gin.H{
+		if err := tx.Model(&activity).Updates(map[string]interface{}{
 			"name":       input.Name,
 			"content":    input.Content,
 			"stock":      gorm.Expr("stock + ?", diff),
 			"total":      input.Total,
-			"start_time": input.StartTime,
-			"end_time":   input.EndTime,
+			"start_time": input.StartTime.ToTime(),
+			"end_time":   input.EndTime.ToTime(),
+			"status":     input.Status,
 		}).Error; err != nil {
-			return errors.New("活动更新失败")
+			return errors.New("活动更新失败:" + err.Error())
 		}
 		return nil
 	})
@@ -182,7 +182,7 @@ func (actLogic *ActivityLogic) asyncCleanup(id int64, delTime gorm.DeletedAt) {
 		result := db.Exec(`
 			UPDATE orders
 			SET status = ?, deleted_at = ?, updated_at = ?
-			WHERE activity_id = ? AND status != ? AND deleted_at IS NULL
+			WHERE id = ? AND status != ? AND deleted_at IS NULL
 			LIMIT ?`,
 			models.CL, delTime.Time, time.Now(), id, models.CL, batchSize)
 
@@ -283,7 +283,8 @@ func (actLogic *ActivityLogic) GetActivities(c context.Context, q models.Activit
 
 	// 查询
 	var activityList models.ActivityList
-	if err := queryDB.Count(&activityList.Total).Error; err != nil {
+	if err := queryDB.Session(&gorm.Session{NewDB: true}).
+		Count(&activityList.Total).Error; err != nil {
 		return nil, errors.New("查询失败:" + err.Error())
 	}
 

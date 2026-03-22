@@ -19,7 +19,7 @@ func CreateActivity(c *gin.Context) {
 	// 获取参数
 	var newActivity models.Activity
 	if err := c.ShouldBindJSON(&newActivity); err != nil {
-		response.JsonErr(c, 400, "参数获取错误")
+		response.JsonErr(c, 400, "参数获取错误:"+err.Error())
 		return
 	}
 
@@ -50,7 +50,7 @@ func UpdateAllActivity(c *gin.Context) {
 
 	var input models.Activity
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.JsonErr(c, 400, "参数获取错误")
+		response.JsonErr(c, 400, "参数获取错误:"+err.Error())
 		return
 	}
 

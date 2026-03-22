@@ -56,7 +56,10 @@ func Login(c *gin.Context) {
 	// 调用逻辑层
 	userInfo, err := userLogic.Login(c, username, password)
 	if err != nil {
-		response.JsonErr(c, 400, err.Error())
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.JsonErr(c, 400, "用户不存在")
+		}
+		response.JsonErr(c, 400, "查询失败:"+err.Error())
 	}
 
 	// 成功登录响应
@@ -80,7 +83,11 @@ func GetMyInfo(c *gin.Context) {
 	// 查找用户及角色
 	var user models.User
 	if err := db.First(&user, userID).Error; err != nil {
-		response.JsonErr(c, 404, "指定用户不存在")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.JsonErr(c, 404, "指定用户不存在")
+		} else {
+			response.JsonErr(c, 400, "查询错误:"+err.Error())
+		}
 		return
 	}
 
