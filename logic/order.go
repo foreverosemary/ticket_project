@@ -2,8 +2,10 @@ package logic
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"ticket/dao"
 	"ticket/models"
@@ -55,8 +57,20 @@ func (l *OrderLogic) CreateOrder(c context.Context, activityId, userId int64, ne
 		return nil, errors.New("订单创建失败:" + err.Error())
 	}
 
-	// 异步创建
-	go l.CreateTickets(activityId, order.ID, need)
+	msg := models.TicketTaskMsg{
+		OrderID:    order.ID,
+		ActivityID: activityId,
+		Need:       need,
+	}
+	msgBytes, err := json.Marshal(msg)
+	if err != nil {
+		return nil, errors.New(fmt.Sprintf("序列化订单 %v 信息时出错:", order.ID) + err.Error())
+	}
+
+	if err := rdb.LPush(c, "task:ticket:create", msgBytes).Err(); err != nil {
+		log.Printf("MQ 投递失败需补充订单 %v 的门票\n", order.ID)
+		return nil, err
+	}
 
 	// 返回信息
 	return map[string]interface{}{
@@ -67,24 +81,39 @@ func (l *OrderLogic) CreateOrder(c context.Context, activityId, userId int64, ne
 	}, nil
 }
 
-func (l *OrderLogic) CreateTickets(activityId, orderId int64, need int) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
+func (l *OrderLogic) ConsumeTicketTasks() {
+	rdb := dao.GetRDB()
+	db := dao.GetDB()
+	ctx := context.Background()
 
-	db := dao.GetDB().WithContext(ctx)
-	tickets := make([]models.Ticket, need)
+	for {
+		result, err := rdb.BRPop(ctx, 0, "task:ticket:create").Result()
+		if err != nil {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
 
-	// 初始化数据
-	for i := 0; i < need; i++ {
-		tickets[i].OrderID = orderId
-		tickets[i].ActivityID = activityId
-		tickets[i].TicketNo = strconv.FormatInt(time.Now().UnixMilli(), 10)
-	}
+		// 反序列化
+		var msg models.TicketTaskMsg
+		if err := json.Unmarshal([]byte(result[1]), &msg); err != nil {
+			log.Printf("消息 %s 反序列化失败: %v", result[1], err)
+			continue
+		}
 
-	if err := db.Transaction(func(tx *gorm.DB) error {
-		return tx.Create(&tickets).Error
-	}); err != nil {
-		fmt.Println(err.Error())
+		// 创建门票
+		tickets := make([]models.Ticket, msg.Need)
+		now := time.Now().UnixMilli()
+		for i := 0; i < msg.Need; i++ {
+			tickets[i].OrderID = msg.OrderID
+			tickets[i].ActivityID = msg.ActivityID
+			tickets[i].TicketNo = fmt.Sprintf("%d%d", now, i)
+			tickets[i].Status = models.IV
+		}
+
+		if err := db.Create(&tickets).Error; err != nil {
+			log.Printf("写入数据库失败: %v", err)
+
+		}
 	}
 }
 

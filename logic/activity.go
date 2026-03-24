@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"log"
 	"strconv"
 	"ticket/dao"
 	"ticket/models"
@@ -160,7 +160,7 @@ func (l *ActivityLogic) UpdatePartialActivity(c context.Context, id int64, dto m
 }
 
 func (l *ActivityLogic) DeleteActivity(c context.Context, id int64) (*models.Activity, error) {
-	db := dao.GetDB().WithContext(c).Unscoped()
+	db := dao.GetDB().WithContext(c)
 	rdb := dao.GetRDB()
 
 	// 检验是否存在
@@ -173,13 +173,11 @@ func (l *ActivityLogic) DeleteActivity(c context.Context, id int64) (*models.Act
 		return nil, errors.New("活动重复删除")
 	}
 
-	deletedTime := gorm.DeletedAt{Time: time.Now(), Valid: true}
-
 	// 删除活动事务
 	err := db.Transaction(func(tx *gorm.DB) error {
 		return tx.Model(&activity).Updates(map[string]interface{}{
 			"status":     models.RM,
-			"deleted_at": deletedTime,
+			"deleted_at": time.Now(),
 		}).Error
 	})
 
@@ -192,8 +190,10 @@ func (l *ActivityLogic) DeleteActivity(c context.Context, id int64) (*models.Act
 	rdb.Del(c, "activity:detail:"+idStr)
 	rdb.Del(c, "activity:stock:"+idStr)
 
-	// 异步
-	go l.asyncCleanup(id, deletedTime)
+	if err := rdb.LPush(c, "task:activity:cleanup", idStr).Err(); err != nil {
+		log.Printf("MQ 投递失败需删除活动 %s 对应的订单和门票\n", idStr)
+		return nil, err
+	}
 
 	// 获取最新结果
 	if err := db.Unscoped().First(&activity, id).Error; err != nil {
@@ -203,53 +203,65 @@ func (l *ActivityLogic) DeleteActivity(c context.Context, id int64) (*models.Act
 	return &activity, nil
 }
 
-func (l *ActivityLogic) asyncCleanup(id int64, delTime gorm.DeletedAt) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-
-	db := dao.GetDB().WithContext(ctx)
+func (l *ActivityLogic) ConsumeActivityTasks() {
+	db := dao.GetDB()
+	rdb := dao.GetRDB()
+	ctx := context.Background()
 	batchSize := 500
 
-	// 分批作废订单
 	for {
-		result := db.Exec(`
-			UPDATE orders
-			SET status = ?, deleted_at = ?, updated_at = ?
-			WHERE id = ? AND status != ? AND deleted_at IS NULL
-			LIMIT ?`,
-			models.CL, delTime.Time, time.Now(), id, models.CL, batchSize)
-
-		if result.Error != nil {
-			fmt.Println(result.Error)
-			return
-		}
-		if result.RowsAffected == 0 {
-			break
+		res, err := rdb.BRPop(ctx, 0, "task:activity:cleanup").Result()
+		if err != nil {
+			time.Sleep(100 * time.Millisecond)
+			continue
 		}
 
-		// 停顿
-		time.Sleep(20 * time.Millisecond)
-	}
+		activityId := res[1]
+		log.Printf("开始清理活动 %s 关联的订单与门票...", activityId)
 
-	// 分批作废门票
-	for {
-		result := db.Exec(`
-			UPDATE tickets 
-			SET status = ?, deleted_at = ?, updated_at = ? 
-			WHERE activity_id = ? AND status != ? AND deleted_at IS NULL 
-			LIMIT ?`,
-			models.IV, delTime.Time, time.Now(), id, models.IV, batchSize)
+		// 分批作废订单
+		for {
+			delTime := time.Now()
+			result := db.Exec(`
+				UPDATE orders
+				SET status = ?, deleted_at = ?
+				WHERE activity_id = ? AND status != ? AND deleted_at IS NULL
+				LIMIT ?`,
+				models.CL, delTime, activityId, models.CL, batchSize)
 
-		if result.Error != nil {
-			fmt.Println(result.Error)
-			return
+			if result.Error != nil {
+				log.Printf("分批作废订单错误:%v", result.Error)
+			}
+			if result.RowsAffected == 0 {
+				break
+			}
+
+			// 停顿
+			time.Sleep(50 * time.Millisecond)
 		}
-		if result.RowsAffected == 0 {
-			break
+
+		// 分批作废门票
+		for {
+			delTime := time.Now()
+			result := db.Exec(`
+				UPDATE tickets 
+				SET status = ?, deleted_at = ?
+				WHERE activity_id = ? AND status != ? AND deleted_at IS NULL 
+				LIMIT ?`,
+				models.IV, delTime, activityId, models.IV, batchSize)
+
+			if result.Error != nil {
+				log.Printf("分批作废门票错误:%v", result.Error)
+			}
+			if result.RowsAffected == 0 {
+				break
+			}
+
+			// 停顿
+			time.Sleep(50 * time.Millisecond)
 		}
 
-		// 停顿
-		time.Sleep(20 * time.Millisecond)
+		log.Printf("活动 %s 清理完成", activityId)
 	}
 }
 
