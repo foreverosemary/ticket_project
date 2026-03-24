@@ -3,6 +3,7 @@ package logic
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"ticket/dao"
 	"ticket/models"
@@ -14,7 +15,78 @@ import (
 
 type OrderLogic struct{}
 
-func (l *OrderLogic) CreateOrder()
+func (l *OrderLogic) CreateOrder(c context.Context, activityId, userId int64, need int) (map[string]interface{}, error) {
+	db := dao.GetDB().WithContext(c)
+	rdb := dao.GetRDB()
+	script := dao.Script
+
+	// 检验活动状态
+	var activity models.Activity
+	if err := db.First(&activity, activityId).Error; err != nil {
+		return nil, errors.New("活动查询失败" + err.Error())
+	}
+	if activity.GetStatus() == models.ED {
+		return nil, errors.New("活动已结束")
+	} else if activity.GetStatus() == models.RM {
+		return nil, errors.New("活动已删除")
+	}
+
+	// 变量声明并执行脚本
+	idStr := strconv.FormatInt(activityId, 10)
+	keys := []string{"activity:stock:" + idStr, "activity:user:set:" + idStr}
+	args := []interface{}{userId, need}
+
+	res, err := script.Run(c, rdb, keys, args...).Int()
+	if err != nil {
+		return nil, errors.New("脚本执行错误:" + err.Error())
+	} else if res == -1 {
+		return nil, errors.New("不允许重复下单")
+	} else if res == 0 {
+		return nil, errors.New("库存不足")
+	}
+
+	// 创建订单
+	var order models.Order
+	order.UserID = userId
+	if err := db.Create(&order).Error; err != nil {
+		// 手动回滚
+		rdb.IncrBy(c, keys[1], int64(need))
+		rdb.SRem(c, keys[2], userId)
+		return nil, errors.New("订单创建失败:" + err.Error())
+	}
+
+	// 异步创建
+	go l.CreateTickets(activityId, order.ID, need)
+
+	// 返回信息
+	return map[string]interface{}{
+		"orderId":      order.ID,
+		"activityId":   activity.ID,
+		"activityName": activity.Name,
+		"createdAt":    order.CreatedAt,
+	}, nil
+}
+
+func (l *OrderLogic) CreateTickets(activityId, orderId int64, need int) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	db := dao.GetDB().WithContext(ctx)
+	tickets := make([]models.Ticket, need)
+
+	// 初始化数据
+	for i := 0; i < need; i++ {
+		tickets[i].OrderID = orderId
+		tickets[i].ActivityID = activityId
+		tickets[i].TicketNo = strconv.FormatInt(time.Now().UnixMilli(), 10)
+	}
+
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		return tx.Create(&tickets).Error
+	}); err != nil {
+		fmt.Println(err.Error())
+	}
+}
 
 func (l *OrderLogic) UpdateOrder(c context.Context, orderId, userId int64, status int) error {
 	db := dao.GetDB().Unscoped()
@@ -66,10 +138,12 @@ func (l *OrderLogic) UpdateOrder(c context.Context, orderId, userId int64, statu
 	}
 
 	err := db.Transaction(func(tx *gorm.DB) error {
-		if e := tx.Model(&models.Order{}).Updates(map[string]interface{}{
-			"status":     status,
-			"deleted_at": time.Now(),
-		}).Error; e != nil {
+		if e := tx.Model(&models.Order{}).
+			Where("id = ?", orderId).
+			Updates(map[string]interface{}{
+				"status":     status,
+				"deleted_at": time.Now(),
+			}).Error; e != nil {
 			return e
 		}
 
@@ -98,6 +172,7 @@ func (l *OrderLogic) UpdateOrder(c context.Context, orderId, userId int64, statu
 	// 修改缓存
 	idStr := strconv.FormatInt(ticket.ActivityID, 10)
 	rdb.IncrBy(c, "activity:stock:"+idStr, total)
+	rdb.SRem(c, "activity:user:set:"+idStr, userId)
 
 	return nil
 }
@@ -108,7 +183,7 @@ func (l *OrderLogic) GetOrders(q models.OrderQuery) (*models.OrderList, error) {
 	// 构建查询
 	queryDB := db.Model(&models.Order{}).
 		Joins("LEFT JOIN `tickets` ON `tickets`.`order_id` = `orders`.`id`").
-		Joins("LFET JOIN `activities` ON `activities`.`id` = `tickets`.`activity_id`")
+		Joins("LEFT JOIN `activities` ON `activities`.`id` = `tickets`.`activity_id`")
 
 	if q.OrderID >= 0 {
 		queryDB = queryDB.Where("`orders`.`id` = ?", q.OrderID)
@@ -130,7 +205,7 @@ func (l *OrderLogic) GetOrders(q models.OrderQuery) (*models.OrderList, error) {
 		return nil, errors.New("查询活动总数错误:" + err.Error())
 	}
 
-	if err := queryDB.
+	if err := queryDB.Limit(q.PageSize).Offset((q.PageNum - 1) * q.PageSize).
 		Select("`orders`.*, `activities`.`name` AS `activity_name`, `activities`.`id` AS `activity_id`").
 		Find(&orderList.Orders).Error; err != nil {
 		return nil, errors.New("查询错误" + err.Error())

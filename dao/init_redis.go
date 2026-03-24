@@ -3,6 +3,7 @@ package dao
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"ticket/config"
 
@@ -13,6 +14,7 @@ var (
 	rdb      *redis.Client
 	ctx      = context.Background()
 	mu_redis sync.RWMutex
+	Script   *redis.Script
 )
 
 func InitRedis() error {
@@ -33,6 +35,13 @@ func InitRedis() error {
 			return
 		}
 	})
+
+	// 初始化脚本
+	content, err := os.ReadFile("./config/order_loc.lua")
+	if err != nil {
+		return err
+	}
+	Script = redis.NewScript(string(content))
 
 	fmt.Printf("Redis连接成功: %v\n", rdb)
 	return nil

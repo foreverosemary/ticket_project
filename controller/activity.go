@@ -36,7 +36,7 @@ func CreateActivity(c *gin.Context) {
 	// 构建成功响应
 	response.JsonOK(c, "创建活动成功", gin.H{
 		"activityId": activity.ID,
-		"status":     activity.Status,
+		"status":     activity.GetStatus(),
 		"createdAt":  activity.CreatedAt.Format(response.FmtTime),
 	})
 }
@@ -72,7 +72,7 @@ func UpdateAllActivity(c *gin.Context) {
 	// 构建成功响应
 	response.JsonOK(c, "全量更新活动成功", gin.H{
 		"activityId": updatedAct.ID,
-		"status":     updatedAct.Status,
+		"status":     updatedAct.GetStatus(),
 		"stock":      updatedAct.Stock,
 		"updatedAt":  updatedAct.UpdatedAt.Format(response.FmtTime),
 	})
@@ -108,7 +108,7 @@ func UpdatePartialActivity(c *gin.Context) {
 	// 构建成功响应
 	response.JsonOK(c, "部分更新成功", gin.H{
 		"activityId": updatedAct.ID,
-		"status":     updatedAct.Status,
+		"status":     updatedAct.GetStatus(),
 		"stock":      updatedAct.Stock,
 		"updatedAt":  updatedAct.UpdatedAt.Format(response.FmtTime),
 	})
@@ -137,7 +137,7 @@ func DeleteActivity(c *gin.Context) {
 	// 构建成功响应
 	response.JsonOK(c, "删除成功", gin.H{
 		"activityId": activity.ID,
-		"status":     activity.Status,
+		"status":     activity.GetStatus(),
 		"deletedAt":  activity.DeletedAt.Time.Format(response.FmtTime),
 	})
 }
@@ -191,7 +191,7 @@ func GetActivities(c *gin.Context) {
 			"name":       act.Name,
 			"total":      act.Total,
 			"stock":      act.Stock,
-			"status":     act.Status,
+			"status":     act.GetStatus(),
 			"startTime":  act.StartTime.Format(response.FmtTime),
 			"endTime":    act.EndTime.Format(response.FmtTime),
 		})
@@ -222,7 +222,7 @@ func GetActivityDetail(c *gin.Context) {
 	}
 
 	// 鉴权
-	if activity.Status == models.RM && c.GetInt("roleId") == models.RoleUser {
+	if activity.GetStatus() == models.RM && c.GetInt("roleId") == models.RoleUser {
 		response.JsonErr(c, 403, "活动已下架")
 		return
 	}
@@ -233,7 +233,7 @@ func GetActivityDetail(c *gin.Context) {
 		"name":       activity.Name,
 		"total":      activity.Total,
 		"stock":      activity.Stock,
-		"status":     activity.Status,
+		"status":     activity.GetStatus(),
 		"startTime":  activity.StartTime.Format(response.FmtTime),
 		"endTime":    activity.EndTime.Format(response.FmtTime),
 		"content":    activity.Content,

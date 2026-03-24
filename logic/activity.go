@@ -24,7 +24,6 @@ func (l *ActivityLogic) CreateActivity(c context.Context, input models.Activity)
 		return nil, err
 	}
 
-	input.SetStatus()
 	input.Stock = input.Total
 	if err := db.Create(&input).Error; err != nil {
 		return nil, errors.New("活动创建失败")
@@ -63,12 +62,6 @@ func (l *ActivityLogic) UpdateAllActivity(c context.Context, id int64, input mod
 	// 更新活动
 	diff := input.Total - activity.Total
 	err := db.Transaction(func(tx *gorm.DB) error {
-		if activity.Status != models.RM {
-			input.SetStatus()
-		} else {
-			input.Status = models.RM
-		}
-
 		if err := tx.Model(&activity).Updates(map[string]interface{}{
 			"name":       input.Name,
 			"content":    input.Content,
@@ -76,7 +69,6 @@ func (l *ActivityLogic) UpdateAllActivity(c context.Context, id int64, input mod
 			"total":      input.Total,
 			"start_time": input.StartTime.ToTime(),
 			"end_time":   input.EndTime.ToTime(),
-			"status":     input.Status,
 		}).Error; err != nil {
 			return errors.New("活动更新失败:" + err.Error())
 		}
@@ -143,9 +135,6 @@ func (l *ActivityLogic) UpdatePartialActivity(c context.Context, id int64, dto m
 			updates["total"] = *dto.Total
 			updates["stock"] = gorm.Expr("stock + ?", diff)
 		}
-		if activity.Status != models.RM {
-			updates["status"] = activity.Status
-		}
 		if err := tx.Model(&activity).Updates(updates).Error; err != nil {
 			return errors.New("活动更新失败")
 		}
@@ -180,7 +169,7 @@ func (l *ActivityLogic) DeleteActivity(c context.Context, id int64) (*models.Act
 		return nil, err
 	}
 
-	if activity.Status == models.RM {
+	if activity.GetStatus() == models.RM {
 		return nil, errors.New("活动重复删除")
 	}
 
@@ -326,7 +315,7 @@ func (l *ActivityLogic) GetActivityDetail(c context.Context, id int64) (*models.
 		}
 
 		// 缓存非下架活动
-		if activity.Status != models.RM {
+		if activity.GetStatus() != models.RM {
 			data, err := json.Marshal(activity)
 			if err == nil {
 				rdb.Set(c, cacheKey, data, 10*time.Minute)

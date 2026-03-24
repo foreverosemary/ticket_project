@@ -39,6 +39,15 @@ func (l *TicketLogic) VerifyTicket(ticketId int64) (*models.Ticket, error) {
 		return nil, errors.New("查询错误:" + err.Error())
 	}
 
+	// 检验订单是否支付
+	var order models.Order
+	if err := db.First(&order, ticket.OrderID).Error; err != nil {
+		return nil, errors.New("查询错误:" + err.Error())
+	}
+	if order.Status == models.UP {
+		return nil, errors.New("请先支付订单再使用门票")
+	}
+
 	// 验参
 	switch ticket.Status {
 	case models.US:

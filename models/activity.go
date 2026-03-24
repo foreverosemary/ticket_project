@@ -16,7 +16,6 @@ type Activity struct {
 	Content   *string            `gorm:"type:text" json:"content"`
 	Stock     int                `gorm:"default:0" json:"stock"`
 	Total     int                `gorm:"default:0" json:"total"`
-	Status    int8               `gorm:"type:tinyint;not null;default:0;index:idx_status_end_time,priority:1" json:"status"`
 	StartTime response.LocalTime `gorm:"not null" json:"startTime"`
 	EndTime   response.LocalTime `gorm:"not null;index:idx_status_end_time,priority:2" json:"endTime"`
 	CreatorID int64              `gorm:"not null;index" json:"creatorId"`
@@ -59,16 +58,16 @@ func (a *Activity) Verify() error {
 	return nil
 }
 
-func (a *Activity) SetStatus() {
-	if a.Status == RM {
-		return
+func (a *Activity) GetStatus() int {
+	if !a.DeletedAt.Valid {
+		return RM
 	}
 	if time.Now().Before(a.StartTime.ToTime()) {
-		a.Status = NS
+		return NS
 	} else if time.Now().Before(a.EndTime.ToTime()) {
-		a.Status = IP
+		return IP
 	} else {
-		a.Status = ED
+		return ED
 	}
 }
 
@@ -96,8 +95,5 @@ func (a *Activity) ApplyUpdates(dto *UpdateActivityDTO) {
 	}
 	if dto.EndTime != nil {
 		a.EndTime = *dto.EndTime
-	}
-	if a.Status != RM {
-		a.SetStatus()
 	}
 }

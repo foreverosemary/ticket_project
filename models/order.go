@@ -7,6 +7,7 @@ import (
 )
 
 const UP, PD, CL = 0, 1, 2
+const LIMIT = 10
 
 type Order struct {
 	ID        int64          `json:"id"`

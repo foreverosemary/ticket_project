@@ -2,6 +2,7 @@ package controller
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"ticket/logic"
 	"ticket/models"
@@ -16,7 +17,42 @@ var (
 )
 
 func CreateOrder(c *gin.Context) {
+	ctx := c.Request.Context()
 
+	type Dto struct {
+		ActivityId int64 `json:"activityId"`
+		Need       int   `json:"need"`
+	}
+
+	var dto Dto
+	if err := c.ShouldBindBodyWithJSON(&dto); err != nil {
+		response.JsonErr(c, 400, err.Error())
+		return
+	}
+
+	if dto.ActivityId <= 0 {
+		response.JsonErr(c, 400, "活动ID错误")
+		return
+	}
+
+	if dto.Need <= 0 || dto.Need > models.LIMIT {
+		response.JsonErr(c, 400, fmt.Sprintf("所购票数应该为 1 ~ %v", models.LIMIT))
+		return
+	}
+
+	userId := c.GetInt64("userId")
+
+	// 调用逻辑层
+	orderInfo, err := orderLogic.CreateOrder(ctx, dto.ActivityId, userId, dto.Need)
+	if err != nil {
+		response.JsonErr(c, 400, err.Error())
+		return
+	}
+
+	// 构建成功响应
+	response.JsonOK(c, "下单成功", map[string]interface{}{
+		"order": orderInfo,
+	})
 }
 
 func UpdateOrder(c *gin.Context) {
@@ -128,6 +164,7 @@ func GetOrderDetail(c *gin.Context) {
 		} else {
 			response.JsonErr(c, 400, err.Error())
 		}
+		return
 	}
 
 	// 构建成功响应

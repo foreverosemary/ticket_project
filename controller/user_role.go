@@ -152,7 +152,7 @@ func GetMyActivities(c *gin.Context) {
 			"activityId": act.ID,
 			"name":       act.Name,
 			"stock":      act.Stock,
-			"status":     act.Status,
+			"status":     act.GetStatus(),
 			"startTime":  act.StartTime.Format(response.FmtTime),
 			"endTime":    act.EndTime.Format(response.FmtTime),
 		})
