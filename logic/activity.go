@@ -15,8 +15,8 @@ import (
 
 type ActivityLogic struct{}
 
-func (actLogic *ActivityLogic) CreateActivity(c context.Context, input models.Activity) (*models.Activity, error) {
-	db := dao.GetDB()
+func (l *ActivityLogic) CreateActivity(c context.Context, input models.Activity) (*models.Activity, error) {
+	db := dao.GetDB().WithContext(c)
 	rdb := dao.GetRDB()
 
 	// 检验
@@ -42,8 +42,8 @@ func (actLogic *ActivityLogic) CreateActivity(c context.Context, input models.Ac
 	return &activity, nil
 }
 
-func (actLogic *ActivityLogic) UpdateAllActivity(c context.Context, id int64, input models.Activity) (*models.Activity, error) {
-	db := dao.GetDB().Unscoped()
+func (l *ActivityLogic) UpdateAllActivity(c context.Context, id int64, input models.Activity) (*models.Activity, error) {
+	db := dao.GetDB().WithContext(c).Unscoped()
 	rdb := dao.GetRDB()
 
 	// 检验是否存在
@@ -101,8 +101,8 @@ func (actLogic *ActivityLogic) UpdateAllActivity(c context.Context, id int64, in
 	return &activity, nil
 }
 
-func (actLogic *ActivityLogic) UpdatePartialActivity(c context.Context, id int64, dto models.UpdateActivityDTO) (*models.Activity, error) {
-	db := dao.GetDB().Unscoped()
+func (l *ActivityLogic) UpdatePartialActivity(c context.Context, id int64, dto models.UpdateActivityDTO) (*models.Activity, error) {
+	db := dao.GetDB().WithContext(c).Unscoped()
 	rdb := dao.GetRDB()
 
 	var activity models.Activity
@@ -170,58 +170,7 @@ func (actLogic *ActivityLogic) UpdatePartialActivity(c context.Context, id int64
 	return &activity, nil
 }
 
-func (actLogic *ActivityLogic) asyncCleanup(id int64, delTime gorm.DeletedAt) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
-
-	db := dao.GetDB().WithContext(ctx)
-	batchSize := 500
-
-	// 分批作废订单
-	for {
-		result := db.Exec(`
-			UPDATE orders
-			SET status = ?, deleted_at = ?, updated_at = ?
-			WHERE id = ? AND status != ? AND deleted_at IS NULL
-			LIMIT ?`,
-			models.CL, delTime.Time, time.Now(), id, models.CL, batchSize)
-
-		if result.Error != nil {
-			fmt.Println(result.Error)
-			return
-		}
-		if result.RowsAffected == 0 {
-			break
-		}
-
-		// 停顿
-		time.Sleep(20 * time.Millisecond)
-	}
-
-	// 分批作废门票
-	// 2. 分批作废门票
-	for {
-		result := db.Exec(`
-			UPDATE tickets 
-			SET status = ?, deleted_at = ?, updated_at = ? 
-			WHERE activity_id = ? AND status != ? AND deleted_at IS NULL 
-			LIMIT ?`,
-			models.IV, delTime.Time, time.Now(), id, models.IV, batchSize)
-
-		if result.Error != nil {
-			fmt.Println(result.Error)
-			return
-		}
-		if result.RowsAffected == 0 {
-			break
-		}
-
-		// 停顿
-		time.Sleep(20 * time.Millisecond)
-	}
-}
-
-func (actLogic *ActivityLogic) DeleteActivity(c context.Context, id int64) (*models.Activity, error) {
+func (l *ActivityLogic) DeleteActivity(c context.Context, id int64) (*models.Activity, error) {
 	db := dao.GetDB().WithContext(c).Unscoped()
 	rdb := dao.GetRDB()
 
@@ -255,7 +204,7 @@ func (actLogic *ActivityLogic) DeleteActivity(c context.Context, id int64) (*mod
 	rdb.Del(c, "activity:stock:"+idStr)
 
 	// 异步
-	go actLogic.asyncCleanup(id, deletedTime)
+	go l.asyncCleanup(id, deletedTime)
 
 	// 获取最新结果
 	if err := db.Unscoped().First(&activity, id).Error; err != nil {
@@ -265,8 +214,58 @@ func (actLogic *ActivityLogic) DeleteActivity(c context.Context, id int64) (*mod
 	return &activity, nil
 }
 
-func (actLogic *ActivityLogic) GetActivities(c context.Context, q models.ActivityQuery) (*models.ActivityList, error) {
-	db := dao.GetDB().Unscoped()
+func (l *ActivityLogic) asyncCleanup(id int64, delTime gorm.DeletedAt) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	db := dao.GetDB().WithContext(ctx)
+	batchSize := 500
+
+	// 分批作废订单
+	for {
+		result := db.Exec(`
+			UPDATE orders
+			SET status = ?, deleted_at = ?, updated_at = ?
+			WHERE id = ? AND status != ? AND deleted_at IS NULL
+			LIMIT ?`,
+			models.CL, delTime.Time, time.Now(), id, models.CL, batchSize)
+
+		if result.Error != nil {
+			fmt.Println(result.Error)
+			return
+		}
+		if result.RowsAffected == 0 {
+			break
+		}
+
+		// 停顿
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	// 分批作废门票
+	for {
+		result := db.Exec(`
+			UPDATE tickets 
+			SET status = ?, deleted_at = ?, updated_at = ? 
+			WHERE activity_id = ? AND status != ? AND deleted_at IS NULL 
+			LIMIT ?`,
+			models.IV, delTime.Time, time.Now(), id, models.IV, batchSize)
+
+		if result.Error != nil {
+			fmt.Println(result.Error)
+			return
+		}
+		if result.RowsAffected == 0 {
+			break
+		}
+
+		// 停顿
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func (l *ActivityLogic) GetActivities(c context.Context, q models.ActivityQuery) (*models.ActivityList, error) {
+	db := dao.GetDB().WithContext(c).Unscoped()
 
 	// 构建查询
 	queryDB := db.Model(&models.Activity{})
@@ -283,14 +282,12 @@ func (actLogic *ActivityLogic) GetActivities(c context.Context, q models.Activit
 
 	// 查询
 	var activityList models.ActivityList
-	if err := queryDB.Session(&gorm.Session{NewDB: true}).
-		Count(&activityList.Total).Error; err != nil {
+	if err := queryDB.Count(&activityList.Total).Error; err != nil {
 		return nil, errors.New("查询失败:" + err.Error())
 	}
 
 	if err := queryDB.
-		Limit(q.PageSize).
-		Offset((q.PageNum - 1) * q.PageSize).
+		Limit(q.PageSize).Offset((q.PageNum - 1) * q.PageSize).
 		Order("status ASC, start_time ASC").
 		Find(&activityList.Activities).Error; err != nil {
 		return nil, errors.New("查询活动列表失败:" + err.Error())
@@ -299,8 +296,8 @@ func (actLogic *ActivityLogic) GetActivities(c context.Context, q models.Activit
 	return &activityList, nil
 }
 
-func (actLogic *ActivityLogic) GetActivityDetail(c context.Context, id int64) (*models.Activity, error) {
-	db := dao.GetDB().Unscoped()
+func (l *ActivityLogic) GetActivityDetail(c context.Context, id int64) (*models.Activity, error) {
+	db := dao.GetDB().WithContext(c).Unscoped()
 	rdb := dao.GetRDB()
 
 	// 先查 Redis

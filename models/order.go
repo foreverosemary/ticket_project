@@ -25,6 +25,7 @@ type Order struct {
 type OrderQuery struct {
 	UserID     int64
 	ActivityID int64
+	OrderID    int64
 	StatusList []int
 	PageNum    int
 	PageSize   int

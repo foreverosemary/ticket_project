@@ -17,6 +17,7 @@ var (
 
 func CreateActivity(c *gin.Context) {
 	// 获取参数
+	ctx := c.Request.Context()
 	var newActivity models.Activity
 	if err := c.ShouldBindJSON(&newActivity); err != nil {
 		response.JsonErr(c, 400, "参数获取错误:"+err.Error())
@@ -26,7 +27,7 @@ func CreateActivity(c *gin.Context) {
 	newActivity.CreatorID = c.GetInt64("userId")
 
 	// 调用逻辑层
-	activity, err := actLogic.CreateActivity(c, newActivity)
+	activity, err := actLogic.CreateActivity(ctx, newActivity)
 	if err != nil {
 		response.JsonErr(c, 400, err.Error())
 		return
@@ -42,6 +43,7 @@ func CreateActivity(c *gin.Context) {
 
 func UpdateAllActivity(c *gin.Context) {
 	// 获取参数
+	ctx := c.Request.Context()
 	activityId, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || activityId <= 0 {
 		response.JsonErr(c, 400, "活动 ID 错误")
@@ -55,7 +57,7 @@ func UpdateAllActivity(c *gin.Context) {
 	}
 
 	// 调用逻辑层
-	updatedAct, err := actLogic.UpdateAllActivity(c, activityId, input)
+	updatedAct, err := actLogic.UpdateAllActivity(ctx, activityId, input)
 
 	// 处理错误
 	if err != nil {
@@ -78,6 +80,7 @@ func UpdateAllActivity(c *gin.Context) {
 
 func UpdatePartialActivity(c *gin.Context) {
 	// 获取参数
+	ctx := c.Request.Context()
 	var dto models.UpdateActivityDTO
 	if err := c.ShouldBindJSON(&dto); err != nil {
 		response.JsonErr(c, 400, "参数获取错误")
@@ -92,7 +95,7 @@ func UpdatePartialActivity(c *gin.Context) {
 	}
 
 	// 调用逻辑层
-	updatedAct, err := actLogic.UpdatePartialActivity(c, activityId, dto)
+	updatedAct, err := actLogic.UpdatePartialActivity(ctx, activityId, dto)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.JsonErr(c, 404, "活动不存在")
@@ -113,6 +116,7 @@ func UpdatePartialActivity(c *gin.Context) {
 
 func DeleteActivity(c *gin.Context) {
 	// 获取参数
+	ctx := c.Request.Context()
 	activityId, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || activityId <= 0 {
 		response.JsonErr(c, 400, "活动ID错误")
@@ -120,7 +124,7 @@ func DeleteActivity(c *gin.Context) {
 	}
 
 	// 调用逻辑层
-	activity, err := actLogic.DeleteActivity(c, activityId)
+	activity, err := actLogic.DeleteActivity(ctx, activityId)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.JsonErr(c, 404, "活动不存在")
@@ -140,7 +144,7 @@ func DeleteActivity(c *gin.Context) {
 
 func GetActivities(c *gin.Context) {
 	var q models.ActivityQuery
-
+	ctx := c.Request.Context()
 	// 活动 ID 条件
 	activityId, _ := strconv.ParseInt(c.DefaultQuery("id", "0"), 10, 64)
 	q.ActivityID = activityId
@@ -173,7 +177,7 @@ func GetActivities(c *gin.Context) {
 	q.PageNum, q.PageSize = response.GetPage(c)
 
 	// 调用逻辑层
-	activityList, err := actLogic.GetActivities(c, q)
+	activityList, err := actLogic.GetActivities(ctx, q)
 	if err != nil {
 		response.JsonErr(c, 400, err.Error())
 		return
@@ -203,6 +207,7 @@ func GetActivities(c *gin.Context) {
 
 func GetActivityDetail(c *gin.Context) {
 	// 获取参数
+	ctx := c.Request.Context()
 	activityId, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || activityId <= 0 {
 		response.JsonErr(c, 400, "活动ID错误")
@@ -210,7 +215,7 @@ func GetActivityDetail(c *gin.Context) {
 	}
 
 	// 调用逻辑层
-	activity, err := actLogic.GetActivityDetail(c, activityId)
+	activity, err := actLogic.GetActivityDetail(ctx, activityId)
 	if err != nil {
 		response.JsonErr(c, 400, err.Error())
 		return
