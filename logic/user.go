@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"ticket/dao"
 	"ticket/models"
 	"ticket/utils"
@@ -103,7 +104,26 @@ func (l *UserLogic) GetMyActivities(q models.ActivityQuery) (*models.ActivityLis
 	if q.Name != "" {
 		queryDB = queryDB.Where("`activities`.`name` LIKE ?", "%"+q.Name+"%")
 	}
-	queryDB = queryDB.Where("`activities`.`status` IN (?)", q.StatusList)
+	// 动态构建状态条件
+	var conds []string
+	var args []interface{}
+	now := time.Now()
+	for _, s := range q.StatusList {
+		switch s {
+		case models.NS:
+			conds = append(conds, "start_time > ?")
+			args = append(args, now)
+		case models.IP:
+			conds = append(conds, "(start_time <= ? AND end_time > ?)")
+			args = append(args, now, now)
+		case models.ED:
+			conds = append(conds, "end_time <= ?")
+			args = append(args, now)
+		case models.RM:
+			conds = append(conds, "deleted_at IS NOT NULL")
+		}
+	}
+	queryDB = queryDB.Where("("+strings.Join(conds, "OR")+")", args...)
 
 	// 查询
 	var activityList models.ActivityList

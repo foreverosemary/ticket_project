@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"strings"
 	"ticket/dao"
 	"ticket/models"
 	"time"
@@ -223,7 +224,26 @@ func (l *ActivityLogic) GetActivities(c context.Context, q models.ActivityQuery)
 		queryDB = queryDB.Where("name LIKE ?", "%"+q.Name+"%")
 	}
 
-	queryDB = queryDB.Where("status IN (?)", q.StatusList)
+	// 动态构建状态条件
+	var conds []string
+	var args []interface{}
+	now := time.Now()
+	for _, s := range q.StatusList {
+		switch s {
+		case models.NS:
+			conds = append(conds, "start_time > ?")
+			args = append(args, now)
+		case models.IP:
+			conds = append(conds, "(start_time <= ? AND end_time > ?)")
+			args = append(args, now, now)
+		case models.ED:
+			conds = append(conds, "end_time <= ?")
+			args = append(args, now)
+		case models.RM:
+			conds = append(conds, "deleted_at IS NOT NULL")
+		}
+	}
+	queryDB = queryDB.Where("("+strings.Join(conds, "OR")+")", args...)
 
 	// 查询
 	var activityList models.ActivityList
@@ -233,7 +253,7 @@ func (l *ActivityLogic) GetActivities(c context.Context, q models.ActivityQuery)
 
 	if err := queryDB.
 		Limit(q.PageSize).Offset((q.PageNum - 1) * q.PageSize).
-		Order("status ASC, start_time ASC").
+		Order("start_time ASC").
 		Find(&activityList.Activities).Error; err != nil {
 		return nil, errors.New("查询活动列表失败:" + err.Error())
 	}
