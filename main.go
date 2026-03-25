@@ -4,6 +4,7 @@ import (
 	"log"
 	"ticket/config"
 	"ticket/dao"
+	"ticket/logic"
 	"ticket/router"
 )
 
@@ -27,6 +28,9 @@ func main() {
 	// 初始化路由
 	router.InitRouter()
 	r := router.GetRouter()
+
+	// 初始化消息队列
+	logic.InitStreamGroup()
 
 	// 启动服务
 	log.Println("服务启动成功并运行在 :8080 端口")
