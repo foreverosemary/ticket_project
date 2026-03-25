@@ -191,7 +191,7 @@ func (l *ActivityLogic) DeleteActivity(c context.Context, id int64) (*models.Act
 
 	// 发送消息
 	for i := 1; i <= 5; i++ {
-		if err := ProduceActivityMsg(activity.ID); err != nil {
+		if err := ProduceActivityMsg(rdb, activity.ID); err != nil {
 			if i == 5 {
 				return nil, errors.New("消息发送失败:" + err.Error())
 			}

@@ -19,18 +19,14 @@ const activityKey = "activity_stream"
 // 消费组名
 const groupName = "consume_group"
 
-var (
-	rdb = dao.GetRDB()
-	ctx = context.Background()
-	db  = dao.GetDB()
-)
-
-func InitStreamGroup() {
+func InitStreamGroup(rdb *redis.Client) {
+	ctx := context.Background()
 	_ = rdb.XGroupCreate(ctx, ticketKey, groupName, "$").Err()
 	_ = rdb.XGroupCreate(ctx, activityKey, groupName, "$").Err()
 }
 
-func ProduceTicketMsg(orderId, activityId int64, need int) error {
+func ProduceTicketMsg(rdb *redis.Client, orderId, activityId int64, need int) error {
+	ctx := context.Background()
 	args := &redis.XAddArgs{
 		Stream: ticketKey,
 		ID:     "*",
@@ -44,7 +40,8 @@ func ProduceTicketMsg(orderId, activityId int64, need int) error {
 	return err
 }
 
-func ProduceActivityMsg(activityId int64) error {
+func ProduceActivityMsg(rdb *redis.Client, activityId int64) error {
+	ctx := context.Background()
 	args := &redis.XAddArgs{
 		Stream: activityKey,
 		ID:     "*",
@@ -56,7 +53,8 @@ func ProduceActivityMsg(activityId int64) error {
 	return err
 }
 
-func StartStreamConsumer() {
+func StartStreamConsumer(rdb *redis.Client) {
+	ctx := context.Background()
 	go func() {
 		for {
 			// 先处理旧消息
@@ -67,7 +65,7 @@ func StartStreamConsumer() {
 				Count:    10,
 			}).Result()
 			if err == nil && len(streams) > 0 {
-				handleMessages(streams)
+				handleMessages(rdb, streams)
 				continue // 重复处理旧消息
 			}
 
@@ -80,13 +78,14 @@ func StartStreamConsumer() {
 			}).Result()
 			// 阻塞读
 			if err == nil && len(streams) > 0 {
-				handleMessages(streams)
+				handleMessages(rdb, streams)
 			}
 		}
 	}()
 }
 
-func handleMessages(streams []redis.XStream) {
+func handleMessages(rdb *redis.Client, streams []redis.XStream) {
+	ctx := context.Background()
 	for _, stream := range streams {
 		// 消息队列判断
 		streamName := stream.Stream
@@ -121,6 +120,7 @@ func handleMessages(streams []redis.XStream) {
 }
 
 func createTicket(orderId, activityId int64, need int) error {
+	db := dao.GetDB()
 	tickets := make([]models.Ticket, need)
 	now := time.Now().UnixMilli()
 	for i := 0; i < need; i++ {
@@ -133,6 +133,7 @@ func createTicket(orderId, activityId int64, need int) error {
 }
 
 func delActivityInfo(activityId int64) error {
+	db := dao.GetDB()
 	batchSize := 500
 	// 分批作废订单
 	for {

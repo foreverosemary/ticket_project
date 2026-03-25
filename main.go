@@ -25,12 +25,15 @@ func main() {
 		log.Fatalf("Redis 错误: %v", err)
 	}
 
+	rdb := dao.GetRDB()
+
 	// 初始化路由
 	router.InitRouter()
 	r := router.GetRouter()
 
-	// 初始化消息队列
-	logic.InitStreamGroup()
+	// 初始化消息队列并启动消费者队列
+	logic.InitStreamGroup(rdb)
+	logic.StartStreamConsumer(rdb)
 
 	// 启动服务
 	log.Println("服务启动成功并运行在 :8080 端口")

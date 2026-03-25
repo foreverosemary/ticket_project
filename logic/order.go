@@ -56,7 +56,7 @@ func (l *OrderLogic) CreateOrder(c context.Context, activityId, userId int64, ne
 
 	// 发送消息
 	for i := 1; i <= 5; i++ {
-		if err := ProduceTicketMsg(order.ID, activityId, need); err != nil {
+		if err := ProduceTicketMsg(rdb, order.ID, activityId, need); err != nil {
 			if i == 5 {
 				return nil, errors.New("消息发送失败:" + err.Error())
 			}
