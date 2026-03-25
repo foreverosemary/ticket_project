@@ -2,10 +2,7 @@ package logic
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"log"
 	"strconv"
 	"ticket/dao"
 	"ticket/models"
@@ -57,19 +54,16 @@ func (l *OrderLogic) CreateOrder(c context.Context, activityId, userId int64, ne
 		return nil, errors.New("订单创建失败:" + err.Error())
 	}
 
-	msg := models.TicketTaskMsg{
-		OrderID:    order.ID,
-		ActivityID: activityId,
-		Need:       need,
-	}
-	msgBytes, err := json.Marshal(msg)
-	if err != nil {
-		return nil, errors.New(fmt.Sprintf("序列化订单 %v 信息时出错:", order.ID) + err.Error())
-	}
-
-	if err := rdb.LPush(c, "task:ticket:create", msgBytes).Err(); err != nil {
-		log.Printf("MQ 投递失败需补充订单 %v 的门票\n", order.ID)
-		return nil, err
+	// 发送消息
+	for i := 1; i <= 5; i++ {
+		if err := ProduceTicketMsg(order.ID, activityId, need); err != nil {
+			if i == 5 {
+				return nil, errors.New("消息发送失败:" + err.Error())
+			}
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		break
 	}
 
 	// 返回信息
@@ -79,42 +73,6 @@ func (l *OrderLogic) CreateOrder(c context.Context, activityId, userId int64, ne
 		"activityName": activity.Name,
 		"createdAt":    order.CreatedAt,
 	}, nil
-}
-
-func (l *OrderLogic) ConsumeTicketTasks() {
-	rdb := dao.GetRDB()
-	db := dao.GetDB()
-	ctx := context.Background()
-
-	for {
-		result, err := rdb.BRPop(ctx, 0, "task:ticket:create").Result()
-		if err != nil {
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
-
-		// 反序列化
-		var msg models.TicketTaskMsg
-		if err := json.Unmarshal([]byte(result[1]), &msg); err != nil {
-			log.Printf("消息 %s 反序列化失败: %v", result[1], err)
-			continue
-		}
-
-		// 创建门票
-		tickets := make([]models.Ticket, msg.Need)
-		now := time.Now().UnixMilli()
-		for i := 0; i < msg.Need; i++ {
-			tickets[i].OrderID = msg.OrderID
-			tickets[i].ActivityID = msg.ActivityID
-			tickets[i].TicketNo = fmt.Sprintf("%d%d", now, i)
-			tickets[i].Status = models.IV
-		}
-
-		if err := db.Create(&tickets).Error; err != nil {
-			log.Printf("写入数据库失败: %v", err)
-
-		}
-	}
 }
 
 func (l *OrderLogic) UpdateOrder(c context.Context, orderId, userId int64, status int) error {

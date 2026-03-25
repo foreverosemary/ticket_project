@@ -65,25 +65,25 @@ func InitRouter() {
 		}
 	}
 
-	// // 订单接口
-	// orderGroup := r.Group("/api/v1/orders")
-	// {
-	// 	// 管理员接口
-	// 	adminGroup := orderGroup.Group("")
-	// 	adminGroup.Use(utils.AdminAuth())
-	// 	{
-	// 		adminGroup.GET("", controller.GetOrders)
-	// 	}
+	// 订单接口
+	orderGroup := r.Group("/api/v1/orders")
+	{
+		// 管理员接口
+		adminGroup := orderGroup.Group("")
+		adminGroup.Use(utils.AdminAuth())
+		{
+			adminGroup.GET("", controller.GetOrders)
+		}
 
-	// 	// 需要登录的接口
-	// 	privateGroup := orderGroup.Group("")
-	// 	privateGroup.Use(utils.JWTAuth())
-	// 	{
-	// 		privateGroup.POST("", controller.CreateOrder)
-	// 		privateGroup.PATCH("/:id", controller.UpdateOrder)
-	// 		privateGroup.GET("/:id", controller.GetOrderDetail)
-	// 	}
-	// }
+		// 需要登录的接口
+		privateGroup := orderGroup.Group("")
+		privateGroup.Use(utils.JWTAuth())
+		{
+			privateGroup.POST("", controller.CreateOrder)
+			privateGroup.PATCH("/:id", controller.UpdateOrder)
+			privateGroup.GET("/:id", controller.GetOrderDetail)
+		}
+	}
 
 	// 票接口
 	ticketGroup := r.Group("/api/v1/tickets")

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"strconv"
 	"ticket/dao"
 	"ticket/models"
@@ -190,9 +189,16 @@ func (l *ActivityLogic) DeleteActivity(c context.Context, id int64) (*models.Act
 	rdb.Del(c, "activity:detail:"+idStr)
 	rdb.Del(c, "activity:stock:"+idStr)
 
-	if err := rdb.LPush(c, "task:activity:cleanup", idStr).Err(); err != nil {
-		log.Printf("MQ 投递失败需删除活动 %s 对应的订单和门票\n", idStr)
-		return nil, err
+	// 发送消息
+	for i := 1; i <= 5; i++ {
+		if err := ProduceActivityMsg(activity.ID); err != nil {
+			if i == 5 {
+				return nil, errors.New("消息发送失败:" + err.Error())
+			}
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		break
 	}
 
 	// 获取最新结果
@@ -201,68 +207,6 @@ func (l *ActivityLogic) DeleteActivity(c context.Context, id int64) (*models.Act
 	}
 
 	return &activity, nil
-}
-
-func (l *ActivityLogic) ConsumeActivityTasks() {
-	db := dao.GetDB()
-	rdb := dao.GetRDB()
-	ctx := context.Background()
-	batchSize := 500
-
-	for {
-		res, err := rdb.BRPop(ctx, 0, "task:activity:cleanup").Result()
-		if err != nil {
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
-
-		activityId := res[1]
-		log.Printf("开始清理活动 %s 关联的订单与门票...", activityId)
-
-		// 分批作废订单
-		for {
-			delTime := time.Now()
-			result := db.Exec(`
-				UPDATE orders
-				SET status = ?, deleted_at = ?
-				WHERE activity_id = ? AND status != ? AND deleted_at IS NULL
-				LIMIT ?`,
-				models.CL, delTime, activityId, models.CL, batchSize)
-
-			if result.Error != nil {
-				log.Printf("分批作废订单错误:%v", result.Error)
-			}
-			if result.RowsAffected == 0 {
-				break
-			}
-
-			// 停顿
-			time.Sleep(50 * time.Millisecond)
-		}
-
-		// 分批作废门票
-		for {
-			delTime := time.Now()
-			result := db.Exec(`
-				UPDATE tickets 
-				SET status = ?, deleted_at = ?
-				WHERE activity_id = ? AND status != ? AND deleted_at IS NULL 
-				LIMIT ?`,
-				models.IV, delTime, activityId, models.IV, batchSize)
-
-			if result.Error != nil {
-				log.Printf("分批作废门票错误:%v", result.Error)
-			}
-			if result.RowsAffected == 0 {
-				break
-			}
-
-			// 停顿
-			time.Sleep(50 * time.Millisecond)
-		}
-
-		log.Printf("活动 %s 清理完成", activityId)
-	}
 }
 
 func (l *ActivityLogic) GetActivities(c context.Context, q models.ActivityQuery) (*models.ActivityList, error) {
