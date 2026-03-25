@@ -12,7 +12,7 @@ type Ticket struct {
 	ID         int64          `json:"id"`
 	TicketNo   string         `gorm:"type:varchar(32);not null;unique" json:"ticketNo"`
 	ActivityID int64          `gorm:"not null;index" json:"activityId"`
-	OrderID    int64          `gorm:"index" json:"orderId"`
+	OrderID    int64          `gorm:"not null;index" json:"orderId"`
 	Status     int8           `gorm:"type:tinyint;not null;default:0;index:idx_status_deleted_at,priority:1" json:"status"`
 	CreatedAt  time.Time      `json:"createdAt"`
 	UpdatedAt  time.Time      `json:"updatedAt"`

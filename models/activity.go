@@ -59,7 +59,7 @@ func (a *Activity) Verify() error {
 }
 
 func (a *Activity) GetStatus() int {
-	if !a.DeletedAt.Valid {
+	if a.DeletedAt.Valid {
 		return RM
 	}
 	if time.Now().Before(a.StartTime.ToTime()) {

@@ -8,7 +8,7 @@ end
 
 -- 获取当前库存与用户所需量
 local stock = tonumber(redis.call("get", KEYS[1]))
-local need = ARGV[2]
+local need = tonumber(ARGV[2])
 
 -- 判断库存是否充足
 if stock  == nil or stock < need then

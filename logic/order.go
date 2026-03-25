@@ -49,8 +49,8 @@ func (l *OrderLogic) CreateOrder(c context.Context, activityId, userId int64, ne
 	order.UserID = userId
 	if err := db.Create(&order).Error; err != nil {
 		// 手动回滚
-		rdb.IncrBy(c, keys[1], int64(need))
-		rdb.SRem(c, keys[2], userId)
+		rdb.IncrBy(c, keys[0], int64(need))
+		rdb.SRem(c, keys[1], userId)
 		return nil, errors.New("订单创建失败:" + err.Error())
 	}
 
@@ -76,11 +76,11 @@ func (l *OrderLogic) CreateOrder(c context.Context, activityId, userId int64, ne
 }
 
 func (l *OrderLogic) UpdateOrder(c context.Context, orderId, userId int64, status int) error {
-	db := dao.GetDB().Unscoped()
+	db := dao.GetDB()
 	rdb := dao.GetRDB()
 
 	var order models.Order
-	if err := db.First(&order, orderId).Error; err != nil {
+	if err := dao.GetDB().Unscoped().First(&order, orderId).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return err
 		}
@@ -99,8 +99,8 @@ func (l *OrderLogic) UpdateOrder(c context.Context, orderId, userId int64, statu
 	}
 
 	var ticket models.Ticket
-	if err := db.First(&ticket, "tickets.order_id = ?", orderId).Error; err != nil {
-		return errors.New("查询失败:" + err.Error())
+	if err := dao.GetDB().Model(&models.Ticket{}).Where("order_id = ?", orderId).First(&ticket).Error; err != nil {
+		return errors.New("查询门票失败:" + err.Error())
 	}
 
 	// 支付订单
@@ -202,21 +202,23 @@ func (l *OrderLogic) GetOrders(q models.OrderQuery) (*models.OrderList, error) {
 }
 
 func (l *OrderLogic) GetOrderDetail(orderId int64) (map[string]interface{}, error) {
-	db := dao.GetDB().
-		Joins("LEFT JOIN `tickets` ON `tickets`.`activity_id` = `activities`.`id`").
-		Joins("LEFT JOIN `activities` ON `activities`.`id` = `tickets`.`activity_id`")
-
 	// 查询
 	var order models.Order
 	var tickets []models.Ticket
 
-	if err := db.Where("id = ?", orderId).
+	if err := dao.GetDB().Table("orders").
+		Joins("LEFT JOIN `tickets` ON `tickets`.`order_id` = `orders`.id").
+		Joins("LEFT JOIN `activities` ON `activities`.`id` = `tickets`.`activity_id`").
+		Where("`orders`.`id` = ?", orderId).
 		Select("`orders`.*, `activities`.`id` AS `activityId`, `activities`.`name` AS `activityName`").
 		First(&order).Error; err != nil {
 		return nil, errors.New("订单查询错误:" + err.Error())
 	}
 
-	if err := db.Where("order_id = ?", orderId).Find(&tickets).Error; err != nil {
+	if err := dao.GetDB().Table("tickets").
+		Where("order_id = ?", orderId).
+		Select("id, ticket_no").
+		Find(&tickets).Error; err != nil {
 		return nil, errors.New("订单对应的门票查询错误:" + err.Error())
 	}
 
@@ -229,6 +231,10 @@ func (l *OrderLogic) GetOrderDetail(orderId int64) (map[string]interface{}, erro
 		})
 	}
 
+	payTime := ""
+	if order.PayTime != nil {
+		payTime = order.PayTime.Format(response.FmtTime)
+	}
 	return map[string]interface{}{
 		"orderId":      order.ID,
 		"tickets":      ticketInfo,
@@ -236,6 +242,6 @@ func (l *OrderLogic) GetOrderDetail(orderId int64) (map[string]interface{}, erro
 		"activityId":   order.ActivityId,
 		"activityName": order.ActivityName,
 		"createdAt":    order.CreatedAt.Format(response.FmtTime),
-		"payTime":      order.PayTime,
+		"payTime":      payTime,
 	}, nil
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 type UserLogic struct{}
@@ -95,7 +96,6 @@ func (l *UserLogic) GetMyActivities(q models.ActivityQuery) (*models.ActivityLis
 		Joins("INNER JOIN `orders` ON `orders`.`id` = `tickets`.`order_id`").
 		Where("`orders`.`user_id` = ?", q.UserID).
 		Where("`orders`.`status` = ?", models.PD).
-		Not("`activities`.`status` = ?", models.RM).
 		Distinct()
 
 	if q.ActivityID > 0 {
@@ -123,7 +123,7 @@ func (l *UserLogic) GetMyActivities(q models.ActivityQuery) (*models.ActivityLis
 			conds = append(conds, "deleted_at IS NOT NULL")
 		}
 	}
-	queryDB = queryDB.Where("("+strings.Join(conds, "OR")+")", args...)
+	queryDB = queryDB.Where("("+strings.Join(conds, " OR ")+")", args...)
 
 	// 查询
 	var activityList models.ActivityList
@@ -185,11 +185,14 @@ func (l *UserLogic) GetMyTickets(q models.TicketQuery) (*models.TicketList, erro
 	queryDB = queryDB.Where("`tickets`.`status` IN (?)", q.StatusList)
 
 	var ticketList models.TicketList
-	if err := queryDB.Distinct("`tickets`.`id`").Count(&ticketList.Total).Error; err != nil {
+	if err := queryDB.Session(&gorm.Session{}).
+		Distinct("`tickets`.`id`").
+		Count(&ticketList.Total).Error; err != nil {
 		return nil, errors.New("查询错误:" + err.Error())
 	}
 
-	if err := queryDB.Limit(q.PageSize).Offset((q.PageNum - 1) * q.PageSize).
+	if err := queryDB.Session(&gorm.Session{}).
+		Limit(q.PageSize).Offset((q.PageNum - 1) * q.PageSize).
 		Select("`tickets`.*, `activities`.`name` AS `activity_name`").
 		Order("`tickets`.`status` ASC, `tickets`.`updated_at` ASC").
 		Find(&ticketList.Tickets).Error; err != nil {

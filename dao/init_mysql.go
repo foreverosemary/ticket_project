@@ -14,6 +14,17 @@ var (
 	mu_mysql sync.RWMutex
 )
 
+func ReSetMySQL() {
+	// 禁用外键
+	db.Exec("SET FOREIGN_KEY_CHECKS = 0")
+	// 清空业务表
+	db.Exec("TRUNCATE TABLE orders")
+	db.Exec("TRUNCATE TABLE tickets")
+	db.Exec("TRUNCATE TABLE activities")
+	// 启用外键
+	db.Exec("SET FOREIGN_KEY_CHECKS = 1")
+}
+
 func InitMySQL() error {
 	// 加载配置并首次连接
 	cfg := config.GetConfig()

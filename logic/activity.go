@@ -176,7 +176,6 @@ func (l *ActivityLogic) DeleteActivity(c context.Context, id int64) (*models.Act
 	// 删除活动事务
 	err := db.Transaction(func(tx *gorm.DB) error {
 		return tx.Model(&activity).Updates(map[string]interface{}{
-			"status":     models.RM,
 			"deleted_at": time.Now(),
 		}).Error
 	})
@@ -243,7 +242,7 @@ func (l *ActivityLogic) GetActivities(c context.Context, q models.ActivityQuery)
 			conds = append(conds, "deleted_at IS NOT NULL")
 		}
 	}
-	queryDB = queryDB.Where("("+strings.Join(conds, "OR")+")", args...)
+	queryDB = queryDB.Where("("+strings.Join(conds, " OR ")+")", args...)
 
 	// 查询
 	var activityList models.ActivityList

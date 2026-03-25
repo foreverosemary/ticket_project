@@ -200,13 +200,17 @@ func GetMyOrders(c *gin.Context) {
 	// 构建成功响应
 	var orders []gin.H
 	for _, order := range orderList.Orders {
+		payTime := ""
+		if order.PayTime != nil {
+			payTime = order.PayTime.Format(response.FmtTime)
+		}
 		orders = append(orders, gin.H{
 			"orderId":      order.ID,
 			"status":       order.Status,
 			"activityId":   order.ActivityId,
 			"activityName": order.ActivityName,
 			"createdAt":    order.CreatedAt.Format(response.FmtTime),
-			"payTime":      order.PayTime.Format(response.FmtTime),
+			"payTime":      payTime,
 		})
 	}
 
@@ -233,7 +237,7 @@ func GetMyTickets(c *gin.Context) {
 	var statusList []int
 	statusStr := c.QueryArray("status")
 	for _, s := range statusStr {
-		if st, err := strconv.Atoi(s); err == nil && st >= 0 && st < 2 {
+		if st, err := strconv.Atoi(s); err == nil && st >= models.UD && st < models.IV {
 			statusList = append(statusList, st)
 		}
 	}

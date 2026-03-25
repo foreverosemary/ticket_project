@@ -8,8 +8,12 @@ import (
 	"ticket/router"
 )
 
-func main() {
+func reset() {
+	dao.ReSetMySQL()
+	dao.ReSetRedis()
+}
 
+func main() {
 	// 加载配置文件
 	if err := config.Load(); err != nil {
 		log.Fatalf("配置加载失败：%v", err)
@@ -25,15 +29,16 @@ func main() {
 		log.Fatalf("Redis 错误: %v", err)
 	}
 
+	//reset()
+
+	// 初始化消息队列并启动消费者队列
 	rdb := dao.GetRDB()
+	logic.InitStreamGroup(rdb)
+	logic.StartStreamConsumer(rdb)
 
 	// 初始化路由
 	router.InitRouter()
 	r := router.GetRouter()
-
-	// 初始化消息队列并启动消费者队列
-	logic.InitStreamGroup(rdb)
-	logic.StartStreamConsumer(rdb)
 
 	// 启动服务
 	log.Println("服务启动成功并运行在 :8080 端口")

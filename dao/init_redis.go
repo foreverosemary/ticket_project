@@ -17,6 +17,12 @@ var (
 	Script   *redis.Script
 )
 
+func ReSetRedis() {
+	ctx := context.Background()
+	fmt.Println("清空 Redis 所有数据")
+	rdb.FlushDB(ctx)
+}
+
 func InitRedis() error {
 	// 加载配置并连接
 	cfg := config.GetConfig()
