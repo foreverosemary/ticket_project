@@ -45,12 +45,11 @@ func ProduceTicketMsg(rdb *redis.Client, orderId, activityId int64, need int) er
 			"need":        need,
 		},
 	}
-	id, err := rdb.XAdd(ctx, args).Result()
+	_, err := rdb.XAdd(ctx, args).Result()
 	if err != nil {
 		log.Printf("[生产者] 消息发送失败: %v", err)
 		return err
 	}
-	log.Printf("[生产者] 消息发送成功, StreamID: %s", id)
 	return err
 }
 
@@ -69,12 +68,12 @@ func ProduceActivityMsg(rdb *redis.Client, activityId int64) error {
 
 func StartStreamConsumer(rdb *redis.Client) {
 	ctx := context.Background()
-	log.Println("[消费者] 启动消费者协程...")
+	log.Println("[消费者] 启动消费者主协程...")
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 				log.Printf("[消费者] 协程崩溃重启中: %v", r)
-				time.Sleep(time.Second)
+				time.Sleep(2 * time.Second)
 				StartStreamConsumer(rdb)
 			}
 		}()
@@ -93,7 +92,7 @@ func StartStreamConsumer(rdb *redis.Client) {
 				}
 
 				handleMessages(rdb, streams)
-				log.Printf("处理完毕 pending 旧消息共: %v 条", countMessages(streams))
+				log.Printf("[消费者] 已清理旧消息: %d 条", countMessages(streams))
 			}
 
 			// 再处理新消息
@@ -107,15 +106,14 @@ func StartStreamConsumer(rdb *redis.Client) {
 			// 阻塞读
 			if err != nil {
 				if !strings.Contains(err.Error(), "context canceled") {
-					log.Printf("[消费者] XReadGroup 错误: %v", err)
+					log.Printf("[消费者] 读取异常: %v", err)
 				}
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(time.Second)
 				continue
 			}
 			if len(streams) > 0 && countMessages(streams) > 0 {
 				log.Printf("处理新消息")
 				handleMessages(rdb, streams)
-				time.Sleep(100 * time.Millisecond)
 			}
 		}
 	}()
@@ -132,8 +130,10 @@ func countMessages(streams []redis.XStream) int {
 func handleMessages(rdb *redis.Client, streams []redis.XStream) {
 	ctx := context.Background()
 	for _, stream := range streams {
-		// 消息队列判断
+		// 消息队列判断与缓冲池
 		streamName := stream.Stream
+		var successIds []string
+
 		for _, msg := range stream.Messages {
 			msgId := msg.ID
 			var err error
@@ -154,9 +154,15 @@ func handleMessages(rdb *redis.Client, streams []redis.XStream) {
 				err = delActivityInfo(activityId)
 			}
 			if err != nil {
-				log.Printf("消息处理失败 [ID: %s]:%v", msgId, err)
+				log.Printf("[处理器] 消息 %s 处理失败: %v", msgId, err)
+				time.Sleep(time.Second)
+				continue
 			}
-			rdb.XAck(ctx, streamName, groupName, msgId)
+			successIds = append(successIds, msgId)
+		}
+
+		if len(successIds) > 0 {
+			rdb.XAck(ctx, streamName, groupName, successIds...)
 		}
 	}
 }
@@ -203,7 +209,6 @@ func delActivityInfo(activityId int64) error {
 	batchSize := 500
 	// 分批作废订单
 	for {
-		delTime := time.Now()
 		result := db.Exec(`
 			UPDATE orders o
 			SET status = ?, deleted_at = ?
@@ -215,7 +220,7 @@ func delActivityInfo(activityId int64) error {
       			AND o.deleted_at IS NULL
 			)
 			LIMIT ?`,
-			models.CL, delTime, activityId, models.CL, batchSize)
+			models.CL, time.Now(), activityId, models.CL, batchSize)
 
 		if result.Error != nil {
 			log.Printf("分批作废订单错误:%v", result.Error)
@@ -231,13 +236,12 @@ func delActivityInfo(activityId int64) error {
 
 	// 分批作废门票
 	for {
-		delTime := time.Now()
 		result := db.Exec(`
 			UPDATE tickets 
 			SET status = ?, deleted_at = ?
 			WHERE activity_id = ? AND status != ? AND deleted_at IS NULL 
 			LIMIT ?`,
-			models.IV, delTime, activityId, models.IV, batchSize)
+			models.IV, time.Now(), activityId, models.IV, batchSize)
 
 		if result.Error != nil {
 			log.Printf("分批作废门票错误:%v", result.Error)
