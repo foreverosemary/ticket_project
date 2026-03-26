@@ -131,13 +131,17 @@ func GetOrders(c *gin.Context) {
 	// 构建成功响应
 	var orders []gin.H
 	for _, order := range orderList.Orders {
+		payTime := ""
+		if order.PayTime != nil {
+			payTime = order.PayTime.Format(response.FmtTime)
+		}
 		orders = append(orders, gin.H{
 			"orderId":      order.ID,
 			"status":       order.Status,
 			"activityId":   order.ActivityId,
 			"activityName": order.ActivityName,
 			"createdAt":    order.CreatedAt.Format(response.FmtTime),
-			"payTime":      order.PayTime.Format(response.FmtTime),
+			"payTime":      payTime,
 		})
 	}
 
@@ -157,7 +161,7 @@ func GetOrderDetail(c *gin.Context) {
 	}
 
 	// 调用逻辑层
-	orderInfo, err := orderLogic.GetOrderDetail(orderId)
+	orderInfo, err := orderLogic.GetOrderDetail(orderId, c.GetInt64("userId"), c.GetInt("roleId"))
 	if err != nil {
 		if errors.Is(gorm.ErrRecordNotFound, err) {
 			response.JsonErr(c, 404, "指定活动不存在")

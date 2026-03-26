@@ -25,18 +25,10 @@ const groupName = "consume_group"
 func InitStreamGroup(rdb *redis.Client) {
 	ctx := context.Background()
 
-	rdb.XAdd(ctx, &redis.XAddArgs{
-		Stream: ticketKey,
-		Values: map[string]interface{}{"init": "create"},
-	})
-	rdb.XAdd(ctx, &redis.XAddArgs{
-		Stream: activityKey,
-		Values: map[string]interface{}{"init": "create"},
-	})
-	if err := rdb.XGroupCreate(ctx, ticketKey, groupName, "$").Err(); err != nil {
+	if err := rdb.XGroupCreateMkStream(ctx, ticketKey, groupName, "$").Err(); err != nil {
 		log.Printf("初始化消息队列失败:%v", err.Error())
 	}
-	if err := rdb.XGroupCreate(ctx, activityKey, groupName, "$").Err(); err != nil {
+	if err := rdb.XGroupCreateMkStream(ctx, activityKey, groupName, "$").Err(); err != nil {
 		log.Printf("初始化消息队列失败:%v", err.Error())
 	}
 }

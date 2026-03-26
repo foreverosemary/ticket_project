@@ -26,6 +26,8 @@ func (l *OrderLogic) CreateOrder(c context.Context, activityId, userId int64, ne
 	}
 	if activity.GetStatus() == models.ED {
 		return nil, errors.New("活动已结束")
+	} else if activity.GetStatus() == models.IP {
+		return nil, errors.New("活动正在进行中——禁止退单")
 	} else if activity.GetStatus() == models.RM {
 		return nil, errors.New("活动已删除")
 	}
@@ -204,18 +206,22 @@ func (l *OrderLogic) GetOrders(q models.OrderQuery) (*models.OrderList, error) {
 	return &orderList, nil
 }
 
-func (l *OrderLogic) GetOrderDetail(orderId int64) (map[string]interface{}, error) {
+func (l *OrderLogic) GetOrderDetail(orderId, userId int64, roleId int) (map[string]interface{}, error) {
 	// 查询
 	var order models.Order
 	var tickets []models.Ticket
 
-	if err := dao.GetDB().Table("orders").
+	if err := dao.GetDB().Unscoped().Table("orders").
 		Joins("LEFT JOIN `tickets` ON `tickets`.`order_id` = `orders`.id").
 		Joins("LEFT JOIN `activities` ON `activities`.`id` = `tickets`.`activity_id`").
 		Where("`orders`.`id` = ?", orderId).
 		Select("`orders`.*, `activities`.`id` AS `activityId`, `activities`.`name` AS `activityName`").
 		First(&order).Error; err != nil {
 		return nil, errors.New("订单查询错误:" + err.Error())
+	}
+
+	if roleId != models.RoleAdmin && userId != order.UserID {
+		return nil, errors.New("无权查看他人订单信息")
 	}
 
 	if err := dao.GetDB().Table("tickets").

@@ -23,8 +23,11 @@ func GetTicketDetail(c *gin.Context) {
 		return
 	}
 
+	userId := c.GetInt64("userId")
+	roleId := c.GetInt("roleId")
+
 	// 查询
-	ticket, err := ticketLogic.GetTicketDetail(ticketId)
+	ticket, err := ticketLogic.GetTicketDetail(ticketId, userId, roleId)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.JsonErr(c, 404, "票不存在")
@@ -59,7 +62,7 @@ func VerifyTicket(c *gin.Context) {
 			response.JsonErr(c, 404, "票不存在")
 			return
 		}
-		response.JsonErr(c, 500, "查询失败")
+		response.JsonErr(c, 400, "查询失败:"+err.Error())
 		return
 	}
 
@@ -85,7 +88,7 @@ func InvalidateTicket(c *gin.Context) {
 			response.JsonErr(c, 404, "票不存在")
 			return
 		}
-		response.JsonErr(c, 500, "查询失败")
+		response.JsonErr(c, 400, "查询失败")
 		return
 	}
 
@@ -160,7 +163,7 @@ func VerifyTicketNO(c *gin.Context) {
 			response.JsonErr(c, 404, "票不存在")
 			return
 		}
-		response.JsonErr(c, 500, "查询失败")
+		response.JsonErr(c, 400, "查询失败")
 		return
 	}
 

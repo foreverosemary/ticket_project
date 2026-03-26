@@ -10,18 +10,30 @@ import (
 
 type TicketLogic struct{}
 
-func (l *TicketLogic) GetTicketDetail(ticketId int64) (*models.Ticket, error) {
-	db := dao.GetDB()
-
+func (l *TicketLogic) GetTicketDetail(ticketId, userId int64, roleId int) (*models.Ticket, error) {
 	var ticket models.Ticket
-	if err := db.Model(&models.Ticket{}).
+	if err := dao.GetDB().Model(&models.Ticket{}).
 		Select("`tickets`.*, `activities`.`name` AS `activity_name`").
 		Joins("LEFT JOIN `activities` ON `activities`.`id` = `tickets`.`activity_id`").
 		First(&ticket, ticketId).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, err
 		}
-		return nil, errors.New(err.Error() + "查询错误")
+		return nil, errors.New("查询错误" + err.Error())
+	}
+
+	var order models.Order
+	if err := dao.GetDB().Model(&models.Order{}).
+		Where("id = ?", ticket.OrderID).
+		First(&order).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, err
+		}
+		return nil, errors.New("查询错误" + err.Error())
+	}
+
+	if roleId != models.RoleAdmin && userId != order.UserID {
+		return nil, errors.New("无权限查看他人的门票")
 	}
 
 	return &ticket, nil
