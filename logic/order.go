@@ -172,15 +172,15 @@ func (l *OrderLogic) GetOrders(q models.OrderQuery) (*models.OrderList, error) {
 		Joins("LEFT JOIN `tickets` ON `tickets`.`order_id` = `orders`.`id`").
 		Joins("LEFT JOIN `activities` ON `activities`.`id` = `tickets`.`activity_id`")
 
-	if q.OrderID >= 0 {
+	if q.OrderID > 0 {
 		queryDB = queryDB.Where("`orders`.`id` = ?", q.OrderID)
 	}
 
-	if q.UserID >= 0 {
+	if q.UserID > 0 {
 		queryDB = queryDB.Where("`orders`.`user_id` = ?", q.UserID)
 	}
 
-	if q.ActivityID >= 0 {
+	if q.ActivityID > 0 {
 		queryDB = queryDB.Where("`tickets`.`activity_id` = ?", q.ActivityID)
 	}
 
@@ -188,12 +188,15 @@ func (l *OrderLogic) GetOrders(q models.OrderQuery) (*models.OrderList, error) {
 
 	// 查询
 	var orderList models.OrderList
-	if err := queryDB.Distinct("`orders`.`id`").Count(&orderList.Total).Error; err != nil {
+	if err := queryDB.Session(&gorm.Session{}).
+		Distinct("`orders`.`id`").Count(&orderList.Total).Error; err != nil {
 		return nil, errors.New("查询活动总数错误:" + err.Error())
 	}
 
-	if err := queryDB.Limit(q.PageSize).Offset((q.PageNum - 1) * q.PageSize).
+	if err := queryDB.Session(&gorm.Session{}).
+		Limit(q.PageSize).Offset((q.PageNum - 1) * q.PageSize).
 		Select("`orders`.*, `activities`.`name` AS `activity_name`, `activities`.`id` AS `activity_id`").
+		Order("`orders`.`created_at` DESC").
 		Find(&orderList.Orders).Error; err != nil {
 		return nil, errors.New("查询错误" + err.Error())
 	}

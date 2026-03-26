@@ -126,7 +126,7 @@ func GetMyActivities(c *gin.Context) {
 	var statusList []int
 	statusStr := c.QueryArray("status")
 	for _, s := range statusStr {
-		if st, err := strconv.Atoi(s); err == nil && st >= 0 && st < 3 {
+		if st, err := strconv.Atoi(s); err == nil && st >= models.NS && st < models.RM {
 			statusList = append(statusList, st)
 		}
 	}

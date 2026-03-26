@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"ticket/dao"
 	"ticket/models"
 	"ticket/utils"
@@ -88,7 +87,7 @@ func (l *UserLogic) Login(c context.Context, username, password string) (map[str
 }
 
 func (l *UserLogic) GetMyActivities(q models.ActivityQuery) (*models.ActivityList, error) {
-	db := dao.GetDB()
+	db := dao.GetDB().Unscoped()
 
 	// 构建查询
 	queryDB := db.Model(&models.Activity{}).
@@ -120,18 +119,21 @@ func (l *UserLogic) GetMyActivities(q models.ActivityQuery) (*models.ActivityLis
 			conds = append(conds, "end_time <= ?")
 			args = append(args, now)
 		case models.RM:
-			conds = append(conds, "deleted_at IS NOT NULL")
+			conds = append(conds, "`activities`.`deleted_at` IS NOT NULL")
 		}
 	}
-	queryDB = queryDB.Where("("+strings.Join(conds, " OR ")+")", args...)
 
 	// 查询
 	var activityList models.ActivityList
-	if err := queryDB.Distinct("`activities`.`id`").Count(&activityList.Total).Error; err != nil {
+	queryDB.Debug().Count(&activityList.Total)
+	if err := queryDB.Session(&gorm.Session{}).
+		Distinct("`activities`.`id`").
+		Count(&activityList.Total).Error; err != nil {
 		return nil, errors.New("查询总数错误:" + err.Error())
 	}
 
-	if err := queryDB.Limit(q.PageSize).Offset((q.PageNum - 1) * q.PageSize).
+	if err := queryDB.Session(&gorm.Session{}).
+		Limit(q.PageSize).Offset((q.PageNum - 1) * q.PageSize).
 		Order("`activities`.`start_time` ASC").
 		Select("`activities`.*").
 		Find(&activityList.Activities).Error; err != nil {

@@ -29,7 +29,7 @@ func main() {
 		log.Fatalf("Redis 错误: %v", err)
 	}
 
-	//reset()
+	reset()
 
 	// 初始化消息队列并启动消费者队列
 	rdb := dao.GetRDB()

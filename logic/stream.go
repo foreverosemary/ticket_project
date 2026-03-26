@@ -181,7 +181,7 @@ func createTicket(orderId, activityId int64, need int) error {
 		tickets[i].OrderID = orderId
 		tickets[i].ActivityID = activityId
 		tickets[i].TicketNo = fmt.Sprintf("%d%d", now, i)
-		tickets[i].Status = models.IV
+		tickets[i].Status = models.UD
 	}
 
 	// 创建事务
