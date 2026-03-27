@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 	"ticket/config"
+	"time"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -53,6 +54,14 @@ func connectMySQL(cfg *config.Config) error {
 	if err != nil {
 		fmt.Printf("MySQL 连接失败: %v", err)
 		return err
+	}
+
+	// 配置连接池
+	sqlDB, err := newDB.DB()
+	if err == nil {
+		sqlDB.SetMaxOpenConns(cfg.MySQL.MaxOpenConns)
+		sqlDB.SetMaxIdleConns(cfg.MySQL.MaxIdleConns)
+		sqlDB.SetConnMaxLifetime(time.Duration(cfg.MySQL.ConnMaxLifetime) * time.Second)
 	}
 
 	mu_mysql.Lock()

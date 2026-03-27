@@ -59,6 +59,10 @@ func connectRedis(cfg *config.Config) error {
 	if err != nil {
 		return err
 	}
+
+	// 注入配置
+	opt.PoolSize = cfg.Redis.PoolSize
+	opt.MinIdleConns = cfg.Redis.MinIdleConns
 	newRdb := redis.NewClient(opt)
 
 	// 测试连接

@@ -27,7 +27,7 @@ func (l *OrderLogic) CreateOrder(c context.Context, activityId, userId int64, ne
 	if activity.GetStatus() == models.ED {
 		return nil, errors.New("活动已结束")
 	} else if activity.GetStatus() == models.IP {
-		return nil, errors.New("活动正在进行中——禁止退单")
+		return nil, errors.New("活动正在进行中——禁止下单")
 	} else if activity.GetStatus() == models.RM {
 		return nil, errors.New("活动已删除")
 	}
@@ -103,6 +103,16 @@ func (l *OrderLogic) UpdateOrder(c context.Context, orderId, userId int64, statu
 	var ticket models.Ticket
 	if err := dao.GetDB().Model(&models.Ticket{}).Where("order_id = ?", orderId).First(&ticket).Error; err != nil {
 		return errors.New("查询门票失败:" + err.Error())
+	}
+
+	// 仅当活动未开始可以修改订单
+	var activity models.Activity
+	if err := dao.GetDB().Model(&models.Activity{}).Where("id = ?", ticket.ActivityID).First(&activity).Error; err != nil {
+		return errors.New("查询活动失败:" + err.Error())
+	}
+
+	if activity.GetStatus() != models.NS {
+		return errors.New("活动已开始或已结束——不允许修改关联订单")
 	}
 
 	// 支付订单

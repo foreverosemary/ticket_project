@@ -37,6 +37,7 @@ func Register(c *gin.Context) {
 	newUser, err := userLogic.Register(username, password)
 	if err != nil {
 		response.JsonErr(c, 400, err.Error())
+		return
 	}
 
 	// 成功注册响应

@@ -11,25 +11,36 @@ import (
 )
 
 type Config struct {
+	App   AppConfig   `mapstructure:"app"`
 	MySQL MySQLConfig `mapstructure:"mysql"`
 	Redis RedisConfig `mapstructure:"redis"`
 }
 
+type AppConfig struct {
+	Mode     string `mapstructure:"mode"`
+	LogLevel string `mapstructure:"logLevel"`
+}
+
 type MySQLConfig struct {
-	Host      string `mapstructure:"host"`
-	Port      int    `mapstructure:"port"`
-	Username  string `mapstructure:"username"`
-	Password  string `mapstructure:"password"`
-	Database  string `mapstructure:"database"`
-	Charset   string `mapstructure:"charset"`
-	ParseTime bool   `mapstructure:"parseTime"`
-	Loc       string `mapstructure:"loc"`
+	Host            string `mapstructure:"host"`
+	Port            int    `mapstructure:"port"`
+	Username        string `mapstructure:"username"`
+	Password        string `mapstructure:"password"`
+	Database        string `mapstructure:"database"`
+	Charset         string `mapstructure:"charset"`
+	ParseTime       bool   `mapstructure:"parseTime"`
+	Loc             string `mapstructure:"loc"`
+	MaxOpenConns    int    `mapstructure:"maxOpenConns"`
+	MaxIdleConns    int    `mapstructure:"maxIdleConns"`
+	ConnMaxLifetime int    `mapstructure:"connMaxLifetime"`
 }
 
 type RedisConfig struct {
-	Addr     string `mapstructure:"addr"`
-	Password string `mapstructure:"password"`
-	DB       int    `mapstructure:"db"`
+	Addr         string `mapstructure:"addr"`
+	Password     string `mapstructure:"password"`
+	DB           int    `mapstructure:"db"`
+	PoolSize     int    `mapstructure:"poolSize"`
+	MinIdleConns int    `mapstructure:"minIdleConns"`
 }
 
 func (m *MySQLConfig) DSN() string {
@@ -40,6 +51,9 @@ func (m *MySQLConfig) DSN() string {
 	cfg.Addr = fmt.Sprintf("%s:%d", m.Host, m.Port)
 	cfg.DBName = m.Database
 	cfg.ParseTime = m.ParseTime
+	cfg.Collation = "utf8mb4_general_ci"
+
+	cfg.InterpolateParams = true
 
 	// 处理时区
 	if m.Loc == "" {

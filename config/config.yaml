@@ -1,3 +1,7 @@
+app:
+  mode: "release"
+  logLevel: "error"
+
 mysql:
   host: localhost
   port: 3307
@@ -7,8 +11,14 @@ mysql:
   charset: "utf8mb4"
   parseTime: true
   loc: "Local"
+  maxOpenConns: 200
+  maxIdleConns: 50
+  connMaxLifetime: 3600
 
 redis:
   addr: "localhost:6379"
   password: "123456"
   db: 0
+  poolSize: 200
+  minIdleConns: 50
+  dialTimeout: 5
