@@ -34,8 +34,9 @@
 
 **Locust 测试结果**：
 
-![测试结果图](./assets/locust 统计图.png)
-![测试结果图](./assets/locust 趋势图.png)
+![测试结果图](./assets/locust_统计图.png)
+![测试结果图](./assets/locust_趋势图.png)
+
 **数据库验证结果**：
 
 ![测试结果图](./assets/活动展示图.png)
