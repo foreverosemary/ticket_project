@@ -43,7 +43,7 @@ func InitRedis() error {
 	})
 
 	// 初始化脚本
-	content, err := os.ReadFile("./config/order_loc.lua")
+	content, err := os.ReadFile("./config/configs/order_loc.lua")
 	if err != nil {
 		return err
 	}

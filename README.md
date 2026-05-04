@@ -72,9 +72,11 @@
 ticket_project
 ├── main.go             # 项目启动入口
 ├── config/             # 配置文件夹（存放数据库密码、Redis地址等）
-│   └── config.yaml
+│   └── configs/
+│       └── config.yaml  
+│       └── order_loc.lua   # lua 脚本
 │   └── config.go
-│   └── order_loc.lua   # lua 脚本
+│   
 ├── controller/         # 接口层（处理接口请求）
 │   ├── user_role.go    # 用户接口
 │   ├── activity.go     # 活动接口

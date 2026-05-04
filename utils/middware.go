@@ -20,7 +20,7 @@ type MyClaims struct {
 var secretKey []byte
 
 func init() {
-	key, err := os.ReadFile("./config/secret.txt")
+	key, err := os.ReadFile("./config/configs/secret.txt")
 	if err != nil {
 		panic("加载密钥失败: " + err.Error())
 	}

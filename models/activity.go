@@ -16,12 +16,12 @@ type Activity struct {
 	Content   *string            `gorm:"type:text" json:"content"`
 	Stock     int                `gorm:"default:0" json:"stock"`
 	Total     int                `gorm:"default:0" json:"total"`
-	StartTime response.LocalTime `gorm:"not null" json:"startTime"`
-	EndTime   response.LocalTime `gorm:"not null;index" json:"endTime"`
+	StartTime response.LocalTime `gorm:"not null;index:idx_start_end,priority:1" json:"startTime"`
+	EndTime   response.LocalTime `gorm:"not null;index:idx_start_end,priority:2;index" json:"endTime"`
 	CreatorID int64              `gorm:"not null;index" json:"creatorId"`
 	CreatedAt time.Time          `json:"createdAt"`
 	UpdatedAt time.Time          `json:"updatedAt"`
-	DeletedAt gorm.DeletedAt     `gorm:"index" json:"deletedAt"`
+	DeletedAt gorm.DeletedAt     `json:"deletedAt"`
 }
 
 type ActivityQuery struct {

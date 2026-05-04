@@ -11,12 +11,12 @@ const LIMIT = 10
 
 type Order struct {
 	ID        int64          `json:"id"`
-	UserID    int64          `gorm:"not null;index:idx_user_status_delete,priority:1" json:"userId"`
-	Status    int8           `gorm:"type:tinyint;not null;default:0;index:idx_user_status_delete,priority:2" json:"status"`
-	PayTime   *time.Time     `json:"payTime,omitempty"`
-	CreatedAt time.Time      `json:"createdAt"`
+	UserID    int64          `gorm:"not null;index:idx_user_status_deleted,priority:1" json:"userId"`
+	Status    int8           `gorm:"type:tinyint;not null;default:0;index:idx_user_status_deleted,priority:2;index:idx_status_deleted_created,priority:1" json:"status"`
+	PayTime   *time.Time     `gorm:"index:idx_pay_time" json:"payTime,omitempty"`
+	CreatedAt time.Time      `gorm:"index:idx_status_deleted_created,priority:3" json:"createdAt"`
 	UpdatedAt time.Time      `json:"updatedAt"`
-	DeletedAt gorm.DeletedAt `gorm:"index:idx_user_status_delete,priority:3" json:"deletedAt"`
+	DeletedAt gorm.DeletedAt `gorm:"index:idx_user_status_deleted,priority:3;index:idx_status_deleted_created,priority:2" json:"deletedAt"`
 
 	// 临时字段
 	ActivityId   int64  `gorm:"->" json:"activityId"`

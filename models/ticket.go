@@ -11,12 +11,12 @@ const UD, US, IV = 0, 1, 2 // 未使用、已使用、已作废
 type Ticket struct {
 	ID         int64          `json:"id"`
 	TicketNo   string         `gorm:"type:varchar(32);not null;unique" json:"ticketNo"`
-	ActivityID int64          `gorm:"not null;index" json:"activityId"`
-	OrderID    int64          `gorm:"not null;index" json:"orderId"`
-	Status     int8           `gorm:"type:tinyint;not null;default:0;index:idx_status_deleted_at,priority:1" json:"status"`
+	ActivityID int64          `gorm:"not null;index;index:idx_activity_status_deleted,priority:1" json:"activityId"`
+	OrderID    int64          `gorm:"not null;index:idx_order_deleted,priority:1" json:"orderId"`
+	Status     int8           `gorm:"type:tinyint;not null;default:0;index:idx_activity_status_deleted,priority:2" json:"status"`
 	CreatedAt  time.Time      `json:"createdAt"`
 	UpdatedAt  time.Time      `json:"updatedAt"`
-	DeletedAt  gorm.DeletedAt `gorm:"index:idx_status_deleted_at,priority:2" json:"deletedAt"`
+	DeletedAt  gorm.DeletedAt `gorm:"index:idx_activity_status_deleted,priority:3;index:idx_order_deleted,priority:2" json:"deletedAt"`
 
 	// 临时字段
 	ActivityName string `gorm:"->" json:"activityName"`
