@@ -65,6 +65,38 @@
    locust -f stress_test.py
    ```
 
+## Docker 部署启动
+
+1. **配置环境**：修改 `config/config.yaml` 中的 MySQL 与 Redis 连接信息。
+   ```yaml
+   # mysql:host
+   host: mysql
+   # redis:addr
+   addr: "redis:6379"
+   ```
+2. **拉取 Docker 基础镜像**：
+   ```bash
+   docker pull mysql:8.0
+   docker pull redis:latest
+   docker pull nginx:latest
+   docker pull golang:1.22-alpine
+   docker pull alpine:3.20
+
+3. **构建项目镜像**：
+   ```bash
+   docker build -t ticket_project:latest .
+   ```
+4. **一键启动服务**:
+   ```bash
+   docker compose up
+   ````
+
+服务可访问地址如下：
+- Nginx 代理入口：http://localhost:81
+- 后端直接访问：http://localhost:8080
+
+压测验证过程参考前文
+
 ---
 
 ## 项目框架
