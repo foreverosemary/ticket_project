@@ -2,7 +2,7 @@
 
 基于 Go 语言开发的高并发抢票预约系统，旨在解决校园活动报名瞬时流量大、易超卖、数据库压力过载等痛点。
 
-**技术栈**：Go 1.21+、Gin、GORM、MySQL、Redis (Lua Scripting)、Redis Stream、JWT、Nginx
+**技术栈**：Go 1.25+、Gin、GORM、MySQL、Redis (Lua Scripting)、Redis Stream、JWT、Nginx
 
 ## 🚀 项目亮点
 
@@ -26,7 +26,7 @@
 ### 2. 异步削峰填谷 (Redis Stream)
 下单成功后即刻返回，门票（Tickets）的生成由后台 **Stream Consumer** 异步完成。
 - **可靠性**：利用消费组（Consumer Group）与 PENDING List 机制，确保消息在协程崩溃重启后仍能被正确确认（XACK）。
-- **性能**：单机 RPS 承载能力相比同步写库提升了 5-10 倍。
+- **性能**：在本地 Locust 压测条件下，异步处理方案相比同步写库，有效提升了接口吞吐量与响应速度。
 
 ### 3. 性能表现 (本地压测)
 
