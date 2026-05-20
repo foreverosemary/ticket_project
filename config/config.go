@@ -73,6 +73,7 @@ var (
 	cfg                   *Config
 	configChangeCallbacks []func() // 配置变化回调函数列表
 	mu                    sync.RWMutex
+	once                  sync.Once
 )
 
 func AddConfigChangeCallback(fn func()) {
@@ -82,7 +83,7 @@ func AddConfigChangeCallback(fn func()) {
 }
 
 // 加载配置文件并解析到结构体
-func Load() error {
+func load() error {
 	// 设置配置文件信息
 	v := viper.New()
 	v.SetConfigFile("./config/configs/config.yaml")
@@ -134,10 +135,10 @@ func Load() error {
 
 // 获取当前配置实例
 func GetConfig() *Config {
-	mu.RLock()
-	defer mu.RUnlock()
-	if cfg == nil {
-		panic("配置未加载，请先调用 Load() 函数")
-	}
+	once.Do(func() {
+		if err := load(); err != nil {
+			panic(fmt.Sprintf("配置初始化失败: %v", err))
+		}
+	})
 	return cfg
 }

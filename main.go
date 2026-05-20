@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"ticket/config"
 	"ticket/dao"
 	"ticket/logic"
 	"ticket/router"
@@ -14,11 +13,6 @@ func reset() {
 }
 
 func main() {
-	// 加载配置文件
-	if err := config.Load(); err != nil {
-		log.Fatalf("配置加载失败：%v", err)
-	}
-
 	// 初始化 MySQL
 	if err := dao.InitMySQL(); err != nil {
 		log.Fatalf("MySQL 错误: %v", err)
