@@ -6,31 +6,36 @@
 
 ## 🚀 项目亮点
 
-- ⚡ **高并发秒杀架构**：采用 **Redis Lua 脚本** 实现“查询-判断-扣减”原子化操作，从硬件层面杜绝超卖；结合 **Redis Stream** 消息队列实现异步落库，将下单接口耗时降至微秒级。
-- 📊 **动态状态机设计**：摒弃传统的数据库状态字段冗余，通过活动时间轴 **动态计算活动状态**（未开始/进行中/已结束），确保业务数据逻辑的绝对一致性。
+- ⚡ **高并发秒杀架构**：采用 **Redis Lua 脚本** 实现“查询-判断-扣减”原子化操作，从 Redis 层面杜绝超卖；结合 **Redis Stream** 消息队列实现异步落库，降低下单接口压力。
+- 📊 **动态状态机设计**：摒弃传统的数据库状态字段冗余，通过活动时间轴 **动态计算活动状态**（未开始/进行中/已结束），确保业务数据逻辑一致。
 - 🧹 **异步资源清理机制**：下架活动时采用 **任务队列分批异步删除** 关联订单与门票，利用 Worker 协程平滑处理大数据量回滚，避免大事务锁表。
-- 🔒 **全链路安全防护**：基于 **JWT** 的用户鉴权体系，并在 Lua 逻辑中嵌入 **Redis Set 去重策略**，精准拦截同一用户瞬间多次下单的恶意行为。
+- 🔒 **全链路安全防护**：基于 **JWT** 的用户鉴权体系，并在 Lua 逻辑中嵌入 **Redis Set 去重策略**，拦截同一用户瞬间多次下单行为。
 
-## 🏗️ 核心架构设计
+## 🏗️ 架构设计
 
-项目采用标准的分层架构设计，确保逻辑清晰、易于扩展：
-1. **Controller 层**：负责参数校验、响应封装及上下文管理。
-2. **Logic 逻辑层**：承载核心业务，处理 Redis 与 MySQL 的双写一致性及异步任务投递。
-3. **DAO/Model 层**：基于 GORM 封装数据库交互，利用软删除保护数据安全性。
+项目采用清晰的分层架构，核心链路围绕“同步抢票校验 + 异步出票落库”展开：
+
+- **接口层（Controller / Router）**：负责路由注册、参数校验、鉴权上下文和统一响应。
+- **业务层（Logic）**：承载活动、订单、门票等核心业务，处理 Redis Lua 扣减、Redis Stream 投递和消费逻辑。
+- **数据层（DAO / Model）**：基于 GORM 管理 MySQL 数据访问，并封装 Redis 初始化、Lua 脚本加载和缓存操作。
+- **部署层（Docker / Nginx）**：提供容器化运行环境和反向代理配置，支持前后端统一入口访问。
 
 ## 🛠️ 技术细节
 
 ### 1. 核心秒杀逻辑 (Lua 原子性)
+
 将库存校验与扣减逻辑封装在一条 Lua 脚本中发送给 Redis，利用 Redis 单线程执行特性，保证高并发环境下用户唯一性校验与库存扣减的原子性。
 
 ### 2. 异步削峰填谷 (Redis Stream)
+
 下单成功后即刻返回，门票（Tickets）的生成由后台 **Stream Consumer** 异步完成。
-- **可靠性**：利用消费组（Consumer Group）与 PENDING List 机制，确保消息在协程崩溃重启后仍能被正确确认（XACK）。
-- **性能**：在本地 Locust 压测条件下，异步处理方案相比同步写库，有效提升了接口吞吐量与响应速度。
+
+- **可靠性**：利用消费组（Consumer Group）与 Pending List 机制，确保消息在协程崩溃重启后仍能被继续处理并正确确认（XACK）。
+- **性能**：在本地 Locust 压测条件下，异步处理方案相比同步写库，有效提升接口吞吐量与响应速度。
 
 ### 3. 性能表现 (本地压测)
 
-使用 **Locust** 模拟极端秒杀场景（1000 并发用户，每秒 200 启动速率）
+使用 **Locust** 模拟极端秒杀场景（1000 并发用户，每秒 200 启动速率）。
 
 **Locust 测试结果**：
 
@@ -45,97 +50,84 @@
 | 指标 | 数值 | 结论 |
 | :--- | :--- | :--- |
 | **并发用户数** | 1000 | 模拟真实抢票峰值流量 |
-| **RPS (吞吐量)** | **640 ~ 750 req/s** | 在全链路资源高占用下保持高水位产出 |
-| **P95 响应时间** | **~1500ms** | 异步链路在极端压力下的稳定表现 |
-| **数据一致性** | **100%** | Redis Lua 原子扣减 + Stream 异步削峰 确保逻辑严丝合缝 |
+| **RPS (吞吐量)** | **640 ~ 750 req/s** | 在全链路资源高占用下保持较高吞吐 |
+| **P95 响应时间** | **~1500ms** | 异步链路在极端压力下保持稳定 |
+| **数据一致性** | **100%** | Redis Lua 原子扣减 + Stream 异步削峰，确保未出现超卖 |
 
-## 📦 快速启动
+## 📦 本地启动
 
-1. **配置环境**：修改 `config/config.yaml` 中的 MySQL 与 Redis 连接信息。
-2. **初始化队列**：程序启动时会自动执行 `XGroupCreateMkStream` 初始化消息队列。
-3. **运行**：
+1. **准备依赖服务**：启动 MySQL 与 Redis。
+2. **修改配置**：根据本地环境修改 `config/configs/config.yaml` 中的 MySQL 与 Redis 连接信息。
+3. **启动后端服务**：
    ```bash
    go run main.go
    ```
-4. **压测验证**：
-   ```bash
-   # 先登录用户
-   py prepare_users.py
-   # 安装 Locust 后运行
-   locust -f stress_test.py
-   ```
+4. **访问服务**：后端默认运行在 `http://localhost:8080`。
 
-## Docker 部署启动
+程序启动时会自动执行 `XGroupCreateMkStream` 初始化 Redis Stream 消费组，并启动后台消费者协程。
 
-1. **配置环境**：修改 `config/config.yaml` 中的 MySQL 与 Redis 连接信息。
+## 🐳 Docker 部署启动
+
+1. **修改容器环境配置**：将 `config/configs/config.yaml` 中的服务地址调整为 docker-compose 内部服务名。
    ```yaml
    # mysql:host
    host: mysql
+
    # redis:addr
    addr: "redis:6379"
    ```
-2. **拉取 Docker 基础镜像**：
+
+2. **拉取基础镜像**：
    ```bash
    docker pull mysql:8.0
    docker pull redis:latest
    docker pull nginx:latest
    docker pull golang:1.22-alpine
    docker pull alpine:3.20
+   ```
 
 3. **构建项目镜像**：
    ```bash
    docker build -t ticket_project:latest .
    ```
-4. **一键启动服务**:
+
+4. **启动完整服务**：
    ```bash
    docker compose up
-   ````
+   ```
 
-服务可访问地址如下：
-- Nginx 代理入口：http://localhost:81
-- 后端直接访问：http://localhost:8080
+5. **访问地址**：
+   - Nginx 代理入口：http://localhost:81
+   - 后端直接访问：http://localhost:8080
 
-压测验证过程参考前文
+## 🧪 压测验证
 
----
+1. **准备测试用户 Token**：
+   ```bash
+   py prepare_users.py
+   ```
 
-## 项目框架
-```
+2. **启动 Locust**：
+   ```bash
+   locust -f stress_test.py
+   ```
+
+3. **在 Locust Web 页面配置并发参数后开始压测**，压测结果可参考上方截图。
+
+## 📁 项目结构
+
+```text
 ticket_project
-├── main.go             # 项目启动入口
-├── config/             # 配置文件夹（存放数据库密码、Redis地址等）
-│   └── configs/
-│       └── config.yaml  
-│       └── order_loc.lua   # lua 脚本
-│   └── config.go
-│   
-├── controller/         # 接口层（处理接口请求）
-│   ├── user_role.go    # 用户接口
-│   ├── activity.go     # 活动接口
-│   └── order.go        # 订单接口
-│   └── ticket.go       # 票接口
-├── logic/              # 业务层（抢票、并发、校验）
-│   ├── user_logic.go
-│   ├── activity_logic.go
-│   ├── order_logic.go
-│   └── ticket_logic.go
-│   └── stream.go       # 消息队列 redis stream
-├── models/             # 定义数据模型
-│   ├── user.go         # 用户模型
-│   └── role.go         # 角色模型
-│   └── activity.go     # 活动模型
-│   └── order.go        # 订单模型
-│   └── ticket.go       # 票模型
-├── dao/                # 数据库操作（GORM）
-│   ├── init_mysql.go   # 初始化连接
-│   └── init_redis.go   # 初始化 Redis 连接
-├── router/             # 路由定义（定义 URL 到 Controller 的映射）
-│   └── router.go
-├── utils/              # 工具类
-│   ├── midddle.go          # 中间件
-│   └── response/
-│       └── response.go     # 统一封装返回给前端的 JSON 格式
-└── web/                # 前端（Vue3 项目）
-    ├── 
-    └── 
+├── main.go                 # 项目启动入口
+├── config/                 # 配置文件与 Redis Lua 脚本
+├── controller/             # API 接口层
+├── logic/                  # 核心业务逻辑：抢票、订单、出票、消息队列
+├── dao/                    # MySQL / Redis 初始化与访问封装
+├── models/                 # 数据模型
+├── router/                 # 路由定义
+├── utils/                  # 中间件与响应封装
+├── web/                    # 前端项目
+├── nginx/                  # Nginx 配置
+├── Dockerfile
+└── docker-compose.yaml
 ```
